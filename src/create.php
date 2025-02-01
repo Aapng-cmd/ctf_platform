@@ -1,6 +1,21 @@
 <?php
 require_once "config.php";
 
+
+if (!is_logged())
+{
+    header("Location: login.php");
+    exit;
+}
+
+$user_info = get_user_info($conn);
+
+if ($user_info['group_type'] === 0)
+{
+	header("Location: home.php");
+    exit;
+}
+
 $conn = start_conn();
 session_start();
 
@@ -292,7 +307,7 @@ $conn->close();
 </head>
 <body>
     <div class="nav-panel">
-        <a href="index.php">Главная</a>
+        <a href="home.php">Главная</a>
         <a href="logout.php">Выйти</a>
     </div>
 

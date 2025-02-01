@@ -7,7 +7,7 @@ $error = "";
 
 function login($conn, $username, $password)
 {
-	$stmt = $conn->prepare("SELECT id, password FROM users WHERE username = ?");
+    $stmt = $conn->prepare("SELECT id, password FROM users WHERE username = ?");
     $stmt->bind_param("s", $username);
     $stmt->execute();
     $stmt->store_result();
@@ -19,41 +19,48 @@ function login($conn, $username, $password)
             $stmt->close();
             return true;
         } else {
-        	$stmt->close();
+            $stmt->close();
             return false;
         }
     } else {
-    	$stmt->close();
+        $stmt->close();
         return false;
     }
 }
 
 function register($conn, $username, $password, $user_type) {
+    $user_type = intval($user_type);
+    
+    if ($user_type !== 1 and $user_type !== 0) {
+        header("Location: login.php");
+        exit;
+    }
+    
     $stmt = $conn->prepare("SELECT id FROM users WHERE username = ?");
     $stmt->bind_param("s", $username);
     $stmt->execute();
     $stmt->store_result();
     if ($stmt->num_rows > 0) {
-    	$stmt->close();
+        $stmt->close();
         return false;
     } else {
         $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
         $stmt = $conn->prepare("INSERT INTO users (username, password, group_type) VALUES (?, ?, ?)");
-        $stmt->bind_param("sss", $username, $hashedPassword, $user_type);
+        $stmt->bind_param("ssi", $username, $hashedPassword, $user_type);
         
         if ($stmt->execute()) {
-        	$stmt->close();
-        	$stmt = $conn->prepare("SELECT id FROM users WHERE username = ?");
-			$stmt->bind_param("s", $username);
-			$stmt->execute();
-			$stmt->store_result();
-			$stmt->bind_result($id);
-        	$stmt->fetch();
-        	copy('profiles/default.jpg', "profiles/$id.jpg");
-        	$stmt->close();
+            $stmt->close();
+            $stmt = $conn->prepare("SELECT id FROM users WHERE username = ?");
+            $stmt->bind_param("s", $username);
+            $stmt->execute();
+            $stmt->store_result();
+            $stmt->bind_result($id);
+            $stmt->fetch();
+            copy('profiles/default.jpg', "profiles/$id.jpg");
+            $stmt->close();
             return true;
         } else {
-        	$stmt->close();
+            $stmt->close();
             return false;
         }
     }
@@ -61,46 +68,46 @@ function register($conn, $username, $password, $user_type) {
 
 if (isset($_POST['register']))
 {
-	$username = isset($_POST['username']) ? $_POST['username'] : null;
-	$password = isset($_POST['password']) ? $_POST['password'] : null;
-	$group_type = isset($_POST['group_type']) ? $_POST['group_type'] : null;
-	#echo "$username|$password|$group_type";
-	if ($username === null or $password === null or $group_type === null)
-	{
-		$error = "Не введено или имя, или пароль, или группа пользователя";
-	}
-	else
-	{
-		if (!register($conn, $username, $password, $group_type))
-		{
-			$error = "Что-то пошло не так";
-		}
-		else
-		{
-			$error = "Отлично, теперь можно войти";
-		}
-	}
+    $username = isset($_POST['username']) ? $_POST['username'] : null;
+    $password = isset($_POST['password']) ? $_POST['password'] : null;
+    $group_type = isset($_POST['group_type']) ? $_POST['group_type'] : null;
+    #echo "$username|$password|$group_type";
+    if ($username === null or $password === null or $group_type === null)
+    {
+        $error = "Не введено или имя, или пароль, или группа пользователя";
+    }
+    else
+    {
+        if (!register($conn, $username, $password, $group_type))
+        {
+            $error = "Что-то пошло не так";
+        }
+        else
+        {
+            $error = "Отлично, теперь можно войти";
+        }
+    }
 }
 else if (isset($_POST['login']))
 {
-	$username = isset($_POST['username']) ? $_POST['username'] : null;
-	$password = isset($_POST['password']) ? $_POST['password'] : null;
-	
-	if ($username === null or $password === null)
-	{
-		$error = "Не введено или имя, или пароль";
-	}
-	else
-	{
-		if (!login($conn, $username, $password))
-		{
-			$error = "Неправильные логин/пароль";
-		}
-		else
-		{
-			header("Location: index.php");
-		}
-	}
+    $username = isset($_POST['username']) ? $_POST['username'] : null;
+    $password = isset($_POST['password']) ? $_POST['password'] : null;
+    
+    if ($username === null or $password === null)
+    {
+        $error = "Не введено или имя, или пароль";
+    }
+    else
+    {
+        if (!login($conn, $username, $password))
+        {
+            $error = "Неправильные логин/пароль";
+        }
+        else
+        {
+            header("Location: home.php");
+        }
+    }
 }
 
 $conn->close();
@@ -121,20 +128,22 @@ $conn->close();
         }
 
         body {
-            font-family: Arial, sans-serif;
-            background-color: #f0f2f5; /* Light gray background */
+            font-family: 'Courier New', Courier, monospace; /* Futuristic font */
+            background-color: #121212; /* Dark background */
+            color: #00ffcc; /* Neon green text */
             display: flex;
             align-items: center;
             justify-content: center;
             height: 100vh; /* Full height of the viewport */
+            backdrop-filter: blur(5px); /* Glassmorphism effect */
         }
 
         /* Container styling */
         .container {
-            background-color: #fff; /* White background for the form */
-            padding: 20px;
-            border-radius: 8px; /* Rounded corners */
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+            background-color: rgba(30, 30, 30, 0.9); /* Semi-transparent dark background */
+            padding: 30px;
+            border-radius: 12px; /* Rounded corners */
+            box-shadow: 0 0 20px rgba(0, 255, 204, 0.5); /* Neon glow effect */
             width: 90%;
             max-width: 400px; /* Maximum width for larger screens */
         }
@@ -164,16 +173,26 @@ $conn->close();
         input[type="text"],
         input[type="password"],
         select {
-            padding: 10px;
-            border: 1px solid #ccc; /* Light gray border */
+            padding: 12px;
+            border: 2px solid #00ffcc; /* Neon green border */
             border-radius: 4px; /* Slightly rounded corners */
             font-size: 16px; /* Font size for inputs */
+            background-color: #2a2a2a; /* Darker background for inputs */
+            color: #fff; /* White text */
+            transition: border-color 0.3s ease; /* Smooth transition */
         }
-        
+
+        input[type="text"]:focus,
+        input[type="password"]:focus,
+        select:focus {
+            border-color: #ff007f; /* Change border color on focus */
+            outline: none; /* Remove default outline */
+        }
+
         p {
             font-size: 20px;
             font-style: italic;
-            color: #333;
+            color: #00ffcc; /* Neon green */
             letter-spacing: 2px;
             text-decoration: underline;
             text-decoration-color: #007bff; /* Change underline color */
@@ -183,7 +202,7 @@ $conn->close();
 
         /* Main button styling */
         button {
-            padding: 10px;
+            padding: 12px;
             background-color: #007bff; /* Bootstrap primary color */
             color: #fff; /* White text */
             border: none; /* No border */
@@ -191,6 +210,7 @@ $conn->close();
             font-size: 16px; /* Font size for button */
             cursor: pointer; /* Pointer on hover */
             margin-top: 10px; /* Space above the button */
+            transition: background-color 0.3s ease; /* Smooth transition */
         }
 
         button:hover {
@@ -207,6 +227,7 @@ $conn->close();
             font-size: 14px; /* Smaller font size */
             cursor: pointer; /* Pointer on hover */
             margin-top: 5px; /* Space above the button */
+            transition: background-color 0.3s ease; /* Smooth transition */
         }
 
         .switch-button:hover {

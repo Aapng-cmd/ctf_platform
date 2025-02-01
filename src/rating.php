@@ -107,7 +107,7 @@ $users = get_sorted_users($conn);
 </head>
 <body>
     <div class="nav-panel">
-        <a href="index.php">Главная</a>
+        <a href="home.php">Главная</a>
         <a href="logout.php">Выйти</a>
     </div>
     <div class="rating-container">

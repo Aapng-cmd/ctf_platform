@@ -5,9 +5,9 @@ function start_conn()
 {
     // Use environment variables
     $db_host = getenv('MYSQL_HOST') ?: '127.0.0.1';
-    $db_username = getenv('MYSQL_USER') ?: '';
-    $db_password = getenv('MYSQL_PASSWORD') ?: '';
-    $db_name = getenv('MYSQL_DATABASE') ?: '';
+    $db_username = getenv('MYSQL_USER') ?: 'user_site';
+    $db_password = getenv('MYSQL_PASSWORD') ?: 'password';
+    $db_name = getenv('MYSQL_DATABASE') ?: 'site';
 
     $conn = new mysqli($db_host, $db_username, $db_password, $db_name);
     

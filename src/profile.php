@@ -13,7 +13,7 @@ if (!is_logged())
 $user_info = get_user_info($conn);
 if ($user_info['group_type'] === 0)
 {
-	header("Location: index.php");
+	header("Location: home.php");
 	exit;
 }
 
@@ -175,7 +175,7 @@ $conn->close();
 </head>
 <body>
     <div class="nav-panel">
-        <a href="index.php">Главная</a>
+        <a href="home.php">Главная</a>
         <a href="logout.php">Выйти</a>
     </div>
 
