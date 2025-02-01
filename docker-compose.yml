@@ -1,0 +1,46 @@
+version: '3'
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    privileged: true
+    ports:
+      - "80:80"  # Map port 8080 on the host to port 80 in the container
+    volumes:
+      - ./src:/var/www/html  # Mount the src directory to the container
+      - ./php.ini:/etc/php/7.4/apache2/php.ini
+      - ./php.ini:/etc/php/7.4/cli/php.ini
+    links:
+      - mysql:mysql
+    dns:
+      - 127.0.0.1
+      - 8.8.8.8
+      - 8.8.4.4
+    networks:
+      - app-network
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_DATABASE=site
+      - MYSQL_USER=user_site
+      - MYSQL_PASSWORD=password
+
+  mysql:
+    image: mysql:8.0
+    networks:
+      - app-network
+    environment:
+      MYSQL_HOST: localhost
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: site
+      MYSQL_USER: user_site
+      MYSQL_PASSWORD: password
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - mysql_data:/var/lib/mysql
+
+volumes:
+  mysql_data:
+networks:
+  app-network:
+    driver: bridge
