@@ -138,6 +138,30 @@ $conn->close();
             backdrop-filter: blur(5px); /* Glassmorphism effect */
         }
 
+        /* Navigation Panel */
+        .nav-panel {
+            background-color: rgba(30, 30, 30, 0.9); /* Semi-transparent dark background */
+            padding: 10px;
+            text-align: center;
+            border-radius: 5px;
+            width: 100%; /* Full width */
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1000; /* Ensure it's above other content */
+        }
+
+        .nav-panel a {
+            color: #00ffcc;
+            text-decoration: none;
+            margin: 0 15px;
+            font-weight: bold;
+        }
+
+        .nav-panel a:hover {
+            color: #ff007f; /* Change color on hover */
+        }
+
         /* Container styling */
         .container {
             background-color: rgba(30, 30, 30, 0.9); /* Semi-transparent dark background */
@@ -146,6 +170,7 @@ $conn->close();
             box-shadow: 0 0 20px rgba(0, 255, 204, 0.5); /* Neon glow effect */
             width: 90%;
             max-width: 400px; /* Maximum width for larger screens */
+            margin-top: 60px; /* Space for the fixed navbar */
         }
 
         /* Form styling */
@@ -247,6 +272,10 @@ $conn->close();
     </style>
 </head>
 <body>
+    <div class="nav-panel">
+        <a href="index.php">Главная</a>
+    </div>
+
     <div class="container">
         <form method="post" class="login-form active">
             <h2>Вход</h2>
