@@ -38,6 +38,8 @@ CREATE TABLE tasks (
     files VARCHAR(100) UNIQUE,
     flag VARCHAR(450) NOT NULL UNIQUE,
     solution TEXT NOT NULL,
+    status INT DEFAULT 0,
+    readme TEXT NOT NULL,
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE,
     FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE SET NULL
 );

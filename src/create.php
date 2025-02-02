@@ -1,6 +1,6 @@
 <?php
 require_once "config.php";
-
+$conn = start_conn();
 
 is_logged();
 
@@ -16,11 +16,11 @@ if ($user_info['group_type'] === 0)
 $conn = start_conn();
 session_start();
 
-function create_task($conn, $name, $category, $description, $level, $cost, $hosting, $files, $flag, $solution)
+function create_task($conn, $name, $category, $description, $level, $cost, $hosting, $files, $flag, $solution, $readme)
 {
     $category_id = get_category_id($conn, $category);
-    $stmt = $conn->prepare("INSERT INTO tasks (name, category_id, description, level, author_id, cost, hosting, files, flag, solution) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("sissiissss", $name, $category_id, $description, $level, $_SESSION['id'], $cost, $hosting, $files, $flag, $solution);
+    $stmt = $conn->prepare("INSERT INTO tasks (name, category_id, description, level, author_id, cost, hosting, files, flag, solution, readme) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("sissiisssss", $name, $category_id, $description, $level, $_SESSION['id'], $cost, $hosting, $files, $flag, $solution, $readme);
     
     if ($stmt->execute()) {
         $stmt->close();
@@ -157,7 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['zip_file'])) {
 				}
 				else { $files = null; }
 				
-                create_task($conn, $parsedData['title'], $parsedData['category'], $parsedData['description'], $parsedData['level'], $parsedData['cost'], $url, $files . "/" . $parsedData['files'], $parsedData['flag'], $parsedData['solution']);
+                create_task($conn, $parsedData['title'], $parsedData['category'], $parsedData['description'], $parsedData['level'], $parsedData['cost'], $url, $files . "/" . $parsedData['files'], $parsedData['flag'], $parsedData['solution'], base64_encode($readmeContent));
                 
                 if ($zip->locateName('docker-compose.yml') !== false)
                 {
