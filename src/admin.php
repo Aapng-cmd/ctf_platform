@@ -31,13 +31,14 @@ function get_sorted_users($conn) {
 $users = get_sorted_users($conn);
 
 function get_tasks($conn) {
-    $tasks_query = "SELECT (SELECT name FROM categories WHERE id = category_id) AS category, name, readme, status FROM tasks";
+    $tasks_query = "SELECT id, (SELECT name FROM categories WHERE id = category_id) AS category, name, readme, status FROM tasks";
     $tasks_result = $conn->query($tasks_query);
 
     $tasks_by_category = [];
     if ($tasks_result->num_rows > 0) {
         while ($row = $tasks_result->fetch_assoc()) {
             $tasks_by_category[$row['category']][] = [
+                'id' => $row['id'],
                 'name' => $row['name'],
                 'status' => $row['status'],
                 'readme' => $row['readme']
@@ -46,6 +47,19 @@ function get_tasks($conn) {
     }
     return $tasks_by_category;
 }
+
+function change_task_state($conn, $task_id, $new_status) {
+    $stmt = $conn->prepare("UPDATE tasks SET status = ? WHERE id = ?");
+    $stmt->bind_param("ii", $new_status, $task_id);
+    $stmt->execute();
+    $stmt->close();
+}
+
+if (isset($_POST['task_id']))
+{
+    change_task_state($conn, intval($_POST['task_id']), intval($_POST['status']));
+}
+
 
 $tasks_by_category = get_tasks($conn);
 $conn->close();
@@ -230,7 +244,7 @@ $conn->close();
                 </thead>
                 <tbody id="userTableBody">
                     <?php foreach ($users as $user): ?>
-                        <tr>
+                        <tr class="userRow">
                             <td><?php echo $user['id']; ?></td>
                             <td><a href="#" class="userLink" data-id="<?php echo $user['id']; ?>"><?php echo $user['username']; ?></a></td>
                             <td><?php echo $user['score']; ?></td>
@@ -253,7 +267,7 @@ $conn->close();
                 <tbody id="taskTableBody">
                     <?php foreach ($tasks_by_category as $category => $tasks): ?>
                         <?php foreach ($tasks as $task): ?>
-                            <tr>
+                            <tr class="taskRow">
                                 <td><?php echo $category; ?></td>
                                 <td>
                                     <a href="#" class="taskLink" data-description="<?php echo htmlspecialchars(base64_decode($task['readme'])); ?>">
@@ -261,12 +275,16 @@ $conn->close();
                                     </a>
                                 </td>
                                 <td>
-                                    <select class="taskStatus">
-                                        <option value="on" <?php if ($task['status'] === 'on') echo 'selected'; ?>>Одобрена</option>
-                                        <option value="deleted" <?php if ($task['status'] === 'deleted') echo 'selected'; ?>>Удалена</option>
-                                        <option value="off" <?php if ($task['status'] === 'off') echo 'selected'; ?>>Пока нету</option>
-                                        <option value="declined" <?php if ($task['status'] === 'declined') echo 'selected'; ?>>Отклонена</option>
-                                    </select>
+                                    <form action="" method="POST" class="statusForm">
+                                        <select name="status" class="taskStatus">
+                                            <option value=1 <?php if ($task['status'] === "1") echo 'selected=""'; ?>>Одобрена</option>
+                                            <option value=2 <?php if ($task['status'] === "2") echo 'selected=""'; ?>>Удалена</option>
+                                            <option value=0 <?php if ($task['status'] === "0") echo 'selected=""'; ?>>Пока нету</option>
+                                            <option value=3 <?php if ($task['status'] === "3") echo 'selected=""'; ?>>Отклонена</option>
+                                        </select>
+                                        <input type="hidden" name="task_id" value="<?php echo $task['id']; ?>">
+                                        <button type="submit" class="applyButton">Применить</button>
+                                    </form>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -275,14 +293,42 @@ $conn->close();
             </table>
         </div>
 
+        <script>
+            document.getElementById('searchInput').addEventListener('input', function() {
+                const query = this.value.toLowerCase();
+                
+                // Filter users
+                const userRows = document.querySelectorAll('.userRow');
+                userRows.forEach(row => {
+                    const username = row.querySelector('td:nth-child(2) a').textContent.toLowerCase();
+                    if (username.includes(query)) {
+                        row.style.display = ''; // Show row if it matches
+                    } else {
+                        row.style.display = 'none'; // Hide row if it doesn't match
+                    }
+                });
+
+                // Filter tasks
+                const taskRows = document.querySelectorAll('.taskRow');
+                taskRows.forEach(row => {
+                    const taskName = row.querySelector('td:nth-child(2) a').textContent.toLowerCase();
+                    if (taskName.includes(query)) {
+                        row.style.display = ''; // Show row if it matches
+                    } else {
+                        row.style.display = 'none'; // Hide row if it doesn't match
+                    }
+                });
+            });
+        </script>
+
         <!-- Popup for Task Description -->
         <div class="overlay" id="overlay" style="display:none;"></div>
         <div class="popup" id="popup" style="display:none;">
-            <h3>README задачи</h3>
+            <h3>Описание задачи</h3>
             <p id="popupContent"></p>
             <button id="closePopup">Закрыть</button>
         </div>
-
+        
         <script>
             document.querySelectorAll('.taskLink').forEach(link => {
                 link.addEventListener('click', function(e) {
@@ -324,6 +370,7 @@ $conn->close();
                 border-radius: 10px;
                 box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
                 z-index: 1000;
+                color: #00ffcc; /* Popup text color */
             }
 
             /* Overlay for popup */
@@ -336,6 +383,53 @@ $conn->close();
                 height: 100%;
                 background: rgba(0, 0, 0, 0.7);
                 z-index: 999;
+            }
+            
+            /* Apply button styling */
+            .applyButton {
+                padding: 5px 10px;
+                background-color: #007bff; /* Bootstrap primary color */
+                color: white;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                transition: background-color 0.3s;
+            }
+
+            .applyButton:hover {
+                background-color: #0056b3; /* Darker shade on hover */
+            }
+
+            /* Style for task links */
+            .taskLink {
+                color: #00ffcc;
+                text-decoration: underline;
+                transition: color 0.3s;
+            }
+
+            .taskLink:hover {
+                color: #ff007f; /* Change color on hover */
+                text-decoration: none; /* Remove underline on hover */
+            }
+
+            /* Style for select dropdown */
+            .taskStatus {
+                padding: 5px;
+                background-color: #1c1c1c;
+                color: #00ffcc;
+                border: 1px solid #00ffcc;
+                border-radius: 5px;
+                cursor: pointer;
+                transition: background-color 0.3s;
+            }
+
+            .taskStatus:hover {
+                background-color: #0056b3; /* Change background on hover */
+            }
+
+            .taskStatus option {
+                background-color: #1c1c1c;
+                color: #00ffcc;
             }
         </style>
 

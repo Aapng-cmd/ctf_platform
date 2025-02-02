@@ -5,7 +5,7 @@ session_start();
 
 function get_categories($conn)
 {
-    $stmt = $conn->prepare("SELECT id, name, amount FROM categories");
+    $stmt = $conn->prepare("SELECT id, name, (SELECT COUNT(*) FROM tasks WHERE category_id = categories.id AND status = 1) AS amount FROM categories");
     $stmt->execute();
     $stmt->store_result();
     $stmt->bind_result($id, $name, $amount);
@@ -24,7 +24,7 @@ function get_categories($conn)
 
 function get_category_tasks($conn, $category_id)
 {
-    $stmt = $conn->prepare("SELECT * FROM tasks where category_id = ?");
+    $stmt = $conn->prepare("SELECT * FROM tasks WHERE category_id = ? AND status = 1");
     $stmt->bind_param("i", $category_id);
     $stmt->execute();
     $result = $stmt->get_result();

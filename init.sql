@@ -21,8 +21,7 @@ CREATE TABLE users (
 -- Create categories table
 CREATE TABLE categories (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(255) NOT NULL UNIQUE,
-    amount INT DEFAULT 0
+    name VARCHAR(255) NOT NULL UNIQUE
 );
 
 -- Create tasks table
@@ -88,7 +87,7 @@ BEGIN
 END; //
 
 DELIMITER ;
-
+/*
 DELIMITER //
 
 CREATE TRIGGER after_task_insert
@@ -114,7 +113,7 @@ BEGIN
 END; //
 
 DELIMITER ;
-
+*/
 -- Create user
 CREATE USER 'user_site'@'%' IDENTIFIED BY 'password';
 
