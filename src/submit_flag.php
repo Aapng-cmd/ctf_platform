@@ -3,11 +3,7 @@ require_once "config.php";
 $conn = start_conn();
 session_start();
 
-if (!is_logged())
-{
-    header("Location: login.php");
-    exit;
-}
+is_logged();
 
 function validate_flag($conn, $flag, $task)
 {

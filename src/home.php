@@ -86,13 +86,7 @@ function get_amount_solved_tasks_by_user($conn) {
     return $solvedTasksByCategory;
 }
 
-if (!is_logged())
-{
-    header("Location: login.php");
-    exit;
-}
-
-# okay, now very hard. I need index.html, where we need a panel, where will be links to rating.php, profile.php and tasks.php. Also, there will be a list of categories (which will be got by php). Do it in cyberpunk style
+is_logged();
 
 $solved_tasks = get_solved_tasks($conn);
 $user_info = get_user_info($conn);

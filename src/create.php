@@ -2,11 +2,8 @@
 require_once "config.php";
 
 
-if (!is_logged())
-{
-    header("Location: login.php");
-    exit;
-}
+is_logged();
+
 
 $user_info = get_user_info($conn);
 

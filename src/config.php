@@ -21,7 +21,11 @@ function start_conn()
 function is_logged()
 {
     session_start();
-    return (!empty($_SESSION));
+    if (empty($_SESSION))
+    {
+    	header("Location: login.php");
+    	exit;
+    }
 }
 
 function get_user_info($conn)
