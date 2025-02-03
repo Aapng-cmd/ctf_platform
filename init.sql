@@ -53,6 +53,14 @@ CREATE TABLE solved_tasks (
     -- UNIQUE (user_id, task_id)
 );
 
+CREATE TABLE hints (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    task_id INT NOT NULL,
+    description TEXT NOT NULL,
+    cost INT,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
+
 DELIMITER //
 
 -- Trigger to update score when a task is solved

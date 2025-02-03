@@ -42,7 +42,7 @@ function get_tasks($conn) {
                 'name' => $row['name'],
                 'status' => $row['status'],
                 'readme' => $row['readme']
-            ]; // Group tasks by category
+            ];
         }
     }
     return $tasks_by_category;

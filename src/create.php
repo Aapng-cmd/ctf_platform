@@ -9,7 +9,7 @@ $user_info = get_user_info($conn);
 
 if ($user_info['group_type'] === 0)
 {
-	header("Location: home.php");
+    header("Location: home.php");
     exit;
 }
 
@@ -20,7 +20,22 @@ function create_task($conn, $name, $category, $description, $level, $cost, $host
 {
     $category_id = get_category_id($conn, $category);
     $stmt = $conn->prepare("INSERT INTO tasks (name, category_id, description, level, author_id, cost, hosting, files, flag, solution, readme) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("sissiisssss", $name, $category_id, $description, $level, $_SESSION['id'], $cost, $hosting, $files, $flag, $solution, $readme);
+    
+    // Sanitize inputs and assign to variables
+    $sanitized_name = htmlspecialchars($name);
+    $sanitized_description = htmlspecialchars($description);
+    $sanitized_level = htmlspecialchars($level);
+    $author_id = (int)$_SESSION['id'];
+    $category_id = (int)$category_id;
+    $sanitized_cost = (int)$cost;
+    $sanitized_hosting = htmlspecialchars($hosting);
+    $sanitized_files = htmlspecialchars($files);
+    $sanitized_flag = htmlspecialchars($flag);
+    $sanitized_solution = htmlspecialchars($solution);
+    $sanitized_readme = htmlspecialchars($readme);
+
+    // Bind parameters using the sanitized variables
+    $stmt->bind_param("sissiisssss", $sanitized_name, $category_id, $sanitized_description, $sanitized_level, $author_id, $sanitized_cost, $sanitized_hosting, $sanitized_files, $sanitized_flag, $sanitized_solution, $sanitized_readme);
     
     if ($stmt->execute()) {
         $stmt->close();
@@ -79,8 +94,8 @@ function parse_readme($content) {
 function getDockerComposeUrl($dockerComposeFile, $hosting, $zip) {
     // Read the contents of the file
     $contents = $zip->getFromName($dockerComposeFile);
-	
-	$lines = explode("\n", $contents);
+    
+    $lines = explode("\n", $contents);
 
     // Initialize the port variable
     $port = null;
@@ -122,6 +137,22 @@ function getDockerComposeUrl($dockerComposeFile, $hosting, $zip) {
     return null;
 }
 
+function create_hint($conn, $hint_data, $taskname)
+{
+    $stmt = $conn->prepare("INSERT INTO hints (task_id, description, cost) VALUES ((SELECT id FROM tasks WHERE name = ?), ?, ?)");
+    $description = htmlspecialchars($hint_data[0]);
+    $cost = (int)htmlspecialchars($hint_data[1]);
+    $stmt->bind_param("ssi", $taskname, $description, $cost);
+    
+    if ($stmt->execute()) {
+        $stmt->close();
+        return true;
+    }
+    $stmt->close();
+    return false;
+}
+
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['zip_file'])) {
     try
     {
@@ -147,33 +178,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['zip_file'])) {
             if ($zip->locateName('README.md') !== false) {
                 $readmeContent = $zip->getFromName('README.md');
                 $parsedData = parse_readme($readmeContent);
-				#print_r($parsedData);
-				$url = getDockerComposeUrl("docker-compose.yml", $parsedData['hosting'], $zip);
-				
-				if ($parsedData['files'] !== "N")
-				{
-					$files = "./uploads/" . $parsedData['title'];
-					$zip->extractTo($files);
-				}
-				else { $files = null; }
-				
+                #print_r($parsedData);
+                $url = getDockerComposeUrl("docker-compose.yml", $parsedData['hosting'], $zip);
+                
+                if ($parsedData['files'] !== "N")
+                {
+                    $files = "./uploads/" . $parsedData['title'];
+                    $zip->extractTo($files);
+                }
+                else { $files = null; }
+                
                 create_task($conn, $parsedData['title'], $parsedData['category'], $parsedData['description'], $parsedData['level'], $parsedData['cost'], $url, $files . "/" . $parsedData['files'], $parsedData['flag'], $parsedData['solution'], base64_encode($readmeContent));
+                
+                if (isset($parsedData['hints']))
+                {
+                    
+                    foreach (explode("\n", $parsedData['hints']) as $hint)
+                    {
+                        $hint_data = explode("|", $hint);
+                        create_hint($conn, $hint_data, $parsedData['title']);
+                    }
+                }
                 
                 if ($zip->locateName('docker-compose.yml') !== false)
                 {
-                	$extractToPath = "./tasks/" . $parsedData['title'];
-                	mkdir($extractToPath, 0755, true);
-                	$zip->extractTo($extractToPath);
-//                	chdir($extractToPath);
-//                	
-//		            $command = 'docker-compose up -d && docker ps';
-//					exec($command, $output, $return_var);
+                    $extractToPath = "./tasks/" . $parsedData['title'];
+                    mkdir($extractToPath, 0755, true);
+                    $zip->extractTo($extractToPath);
+//                    chdir($extractToPath);
+//                    
+//                    $command = 'docker-compose up -d && docker ps';
+//                    exec($command, $output, $return_var);
 
-//					if ($return_var === 0) {
-//						echo "Docker Compose started successfully in $extractToPath.";
-//					} else {
-//						echo "Failed to start Docker Compose. Return code: $return_var.<br>";
-//					}
+//                    if ($return_var === 0) {
+//                        echo "Docker Compose started successfully in $extractToPath.";
+//                    } else {
+//                        echo "Failed to start Docker Compose. Return code: $return_var.<br>";
+//                    }
                 }
                 
             } else {
@@ -290,15 +331,15 @@ $conn->close();
             background-color: #ff007f; /* Change color on hover */
         }
         .warning {
-			background-color: #fff3cd; /* Light yellow background */
-			color: #856404; /* Darker yellow/brown text color */
-			border: 1px solid #ffeeba; /* Light yellow border */
-			padding: 15px; /* Padding around the text */
-			border-radius: 5px; /* Rounded corners */
-			margin: 20px 0; /* Margin above and below the warning */
-			font-weight: bold; /* Bold text */
-			text-align: center; /* Center the text */
-		}
+            background-color: #fff3cd; /* Light yellow background */
+            color: #856404; /* Darker yellow/brown text color */
+            border: 1px solid #ffeeba; /* Light yellow border */
+            padding: 15px; /* Padding around the text */
+            border-radius: 5px; /* Rounded corners */
+            margin: 20px 0; /* Margin above and below the warning */
+            font-weight: bold; /* Bold text */
+            text-align: center; /* Center the text */
+        }
     </style>
 </head>
 <body>
@@ -337,11 +378,15 @@ Y/N
 ## Flag
 flag_plug
 
+## Hints
+hint1|10
+hint2|20
+
 ## Solution
 maybe, heh
 &ltcode&gtThis could be&lt/code&gt
         </pre>
-		<h2 class="warning">Убедитесь, что если нужны доп. файлы для решения, то они должны быть упакованы в архив, а сам архив упакован в основной. Если указан хостинг "Y", то в архиве должен быть docker-compose.yml</h2>
+        <h2 class="warning">Убедитесь, что если нужны доп. файлы для решения, то они должны быть упакованы в архив, а сам архив упакован в основной. Если указан хостинг "Y", то в архиве должен быть docker-compose.yml</h2>
         <form action="" method="POST" enctype="multipart/form-data">
             <input type="file" name="zip_file" accept=".zip" required>
             <button type="submit">Загрузить</button>

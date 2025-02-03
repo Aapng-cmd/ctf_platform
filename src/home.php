@@ -13,7 +13,7 @@ function get_categories($conn)
     $result = [];
     
     while ($stmt->fetch())
-    {
+    {   
         $result[] = ['id' => $id, 'name' => $name, 'amount' => $amount];
     }
     
@@ -133,7 +133,7 @@ $conn->close();
             transition: background 0.3s, color 0.3s;
         }
         a.tasks_url {
-        	color: white;
+            color: white;
         }
         .sidebar a:hover {
             background-color: rgba(0, 255, 255, 0.2);
@@ -335,6 +335,20 @@ $conn->close();
         z-index: 1000; /* Ensure it appears above other content */
         transition: opacity 0.5s ease; /* Optional: Fade effect */
     }
+    
+    .hint-description-block {
+        background-color: #000066; /* Light background color */
+        border: 1px solid #ccc; /* Border for the block */
+        border-radius: 5px; /* Rounded corners */
+        padding: 15px; /* Padding inside the block */
+        margin-top: 10px; /* Space above the block */
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Subtle shadow effect */
+    }
+
+    .error-message {
+        color: red; /* Red color for error messages */
+        font-weight: bold; /* Bold text for emphasis */
+    }
     </style>
 </head>
 <body>
@@ -367,7 +381,7 @@ $conn->close();
                 echo '<div class="task-list">';
                 foreach ($tasks as $task) {
                     echo '
-                    <div class="task-item" ' . ( empty($solved_tasks) ? '' : (( in_array($task['id'], $solved_tasks) ) ? 'style="background-color: green"' : '')) . ' onclick="showTaskDetails(' . htmlspecialchars($task['id']) . ')">
+                    <div class="task-item" style="border: 1px solid #ccc; padding: 10px; margin: 10px; cursor: pointer;" onclick="fetchTaskDetails(' . htmlspecialchars($task['id']) . ')">
                         <h2>' . htmlspecialchars($task['name']) . '</h2>
                         <p>Стоимость: <strong>' . htmlspecialchars($task['cost']) . '</strong></p>
                     </div>';
@@ -375,7 +389,7 @@ $conn->close();
                 echo '</div>';
             }
         }
-        
+
         $conn->close();
         ?>
         
@@ -389,6 +403,11 @@ $conn->close();
                 <p id="taskFileURLp"><strong>Ссылка на файлы для решения:</strong> <a class="tasks_url" id="taskFileURL"></a></p>
                 <p><strong>Количество решений:</strong> <span id="taskSolutionsCount"></span></p>
                 <p><strong>Первая кровь:</strong> <span id="firstBloodUser"></span></p>
+                <div id="hintSection" style="display:none;">
+                    <strong>Подсказки:</strong>
+                    <ul id="taskHintsList"></ul> <!-- List for hints -->
+                </div>
+                <div id="hintDescription" style="display:none;"></div> <!-- Section for hint description -->
                 <form id="flagForm" onsubmit="submitFlag(event)">
                     <label for="flagInput">Введите флаг:</label>
                     <input type="text" id="flagInput" name="flag" required>
@@ -397,10 +416,10 @@ $conn->close();
             </div>
         </div>
     </div>
+
     <script>
-        function showTaskDetails(taskId) {
-            // Fetch task details using AJAX
-            fetch('get_task_details.php?id=' + taskId)
+        function fetchTaskDetails(taskId) {
+            fetch('get_task_details.php?id=' + taskId) // Fetch task details
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
@@ -408,26 +427,35 @@ $conn->close();
                         document.getElementById('taskName').innerText = data.task.name;
                         document.getElementById('taskCost').innerText = data.task.cost;
                         document.getElementById('taskDescription').innerText = data.task.description;
-                        if (data.task.hosting !== null)
-                        {
-		                    document.getElementById('taskURL').innerText = data.task.hosting;
-		                    document.getElementById('taskURL').href = data.task.hosting;
-		                }
-                        else
-                        {
-                        	document.getElementById('taskURLp').hidden = true;
+
+                        // Set URLs if available
+                        if (data.task.hosting) {
+                            document.getElementById('taskURL').innerText = data.task.hosting;
+                            document.getElementById('taskURL').href = data.task.hosting;
+                        } else {
+                            document.getElementById('taskURLp').hidden = true;
                         }
-                        if (data.task.files !== null)
-                        {
-                        	document.getElementById('taskFileURL').innerText = data.task.files.split('/')[3];
-                        	document.getElementById('taskFileURL').href = data.task.files;
+                        if (data.task.files) {
+                            document.getElementById('taskFileURL').innerText = data.task.files.split('/').pop();
+                            document.getElementById('taskFileURL').href = data.task.files;
+                        } else {
+                            document.getElementById('taskFileURLp').hidden = true;
                         }
-                        else
-                        {
-                        	document.getElementById('taskFileURLp').hidden = true;
-                        }
+
                         document.getElementById('taskSolutionsCount').innerText = data.task.solutions_count;
                         document.getElementById('firstBloodUser').innerText = data.task.first_blood_user;
+
+                        // Fetch hints for the task
+                        document.getElementById('taskHintsList').innerHTML = ''; // Clear previous hints
+                        data.hints.forEach(hint => {
+                            const li = document.createElement('li');
+                            li.innerText = `Стоимость: ${hint.hint_cost}`; // Display hint cost only
+                            li.dataset.hintId = hint.hint_id; // Store hint ID in data attribute
+                            li.onclick = () => revealHint(hint.hint_id); // Add click event to fetch hint description
+                            document.getElementById('taskHintsList').appendChild(li);
+                        });
+                        document.getElementById('hintSection').style.display = 'block'; // Show hint section
+
                         // Show modal
                         document.getElementById('taskModal').style.display = 'flex';
                     }
@@ -436,11 +464,44 @@ $conn->close();
                     console.error('Error fetching task details:', error);
                 });
         }
-        
+
+        function revealHint(hintId) {
+            fetch('reveal_hint.php?hint_id=' + hintId) // Fetch hint description
+                .then(response => response.json())
+                .then(data => {
+                    const hintDescriptionDiv = document.getElementById('hintDescription');
+                    hintDescriptionDiv.innerHTML = ''; // Clear previous hint description
+                    const descriptionBlock = document.createElement('div'); // Create a new div for the description
+                    descriptionBlock.className = 'hint-description-block'; // Add a class for styling
+
+                    if (data.success) {
+                        const p = document.createElement('p');
+                        p.innerText = data.description; // Set hint description
+                        descriptionBlock.appendChild(p); // Append description paragraph
+                    } else {
+                        console.error('Error fetching hint:', data.description);
+                        const errorMessage = document.createElement('p');
+                        errorMessage.innerText = data.description; // Display error message
+                        errorMessage.className = 'error-message'; // Add a class for error styling
+                        descriptionBlock.appendChild(errorMessage);
+                    }
+
+                    hintDescriptionDiv.appendChild(descriptionBlock); // Append the styled block to the hint description div
+                    hintDescriptionDiv.style.display = 'block'; // Show hint description
+                })
+                .catch(error => {
+                    console.error('Error fetching hint:', error);
+                });
+        }
+
         function closeModal() {
             document.getElementById('taskModal').style.display = 'none';
+            document.getElementById('hintSection').style.display = 'none'; // Hide hint section when modal is closed
+            document.getElementById('taskHintsList').innerHTML = ''; // Clear hints list
+            document.getElementById('hintDescription').innerHTML = ''; // Clear hint description
+            document.getElementById('hintDescription').style.display = 'none'; // Hide hint description
         }
-        
+
         function submitFlag(event) {
             event.preventDefault(); // Prevent form submission
             const flag = document.getElementById('flagInput').value;
@@ -456,7 +517,7 @@ $conn->close();
                 method: 'POST',
                 body: formData, // Send the FormData object directly
             })
-            .then(response => response.text()) // Change to text response
+            .then(response => response.text())
             .then(data => {
                 // Create a notification element
                 const notification = document.createElement('div');
