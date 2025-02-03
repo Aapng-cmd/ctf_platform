@@ -100,7 +100,7 @@ $conn->close();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Киберпанк Панель</title>
+    <title>CTF Панель</title>
     <style>
         body {
             font-family: 'Courier New', Courier, monospace;
@@ -339,7 +339,7 @@ $conn->close();
 </head>
 <body>
     <div class="sidebar">
-        <h2>Киберпанк Панель</h2>
+        <h2>CTF Панель</h2>
         <a href="rating.php">Рейтинг</a>
         <a href="profile.php">Профиль</a>
         <a href="logout.php">Выйти</a>
@@ -358,7 +358,7 @@ $conn->close();
         </div>
     </div>
     <div class="main-content">
-        <h1>Добро пожаловать в Киберпанк Панель</h1>
+        <h1>Добро пожаловать в CTF Панель</h1>
         <?php
         $conn = start_conn();
         if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['category_id'])) {
