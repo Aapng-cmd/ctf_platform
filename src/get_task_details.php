@@ -2,7 +2,6 @@
 require_once "config.php";
 
 $conn = start_conn();
-session_start();
 
 if (isset($_GET['id'])) {
     $taskId = intval($_GET['id']);

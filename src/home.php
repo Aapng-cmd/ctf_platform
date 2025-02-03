@@ -1,7 +1,6 @@
 <?php
 require_once "config.php";
 $conn = start_conn();
-session_start();
 
 function get_categories($conn)
 {

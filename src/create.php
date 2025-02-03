@@ -13,8 +13,6 @@ if ($user_info['group_type'] === 0)
     exit;
 }
 
-$conn = start_conn();
-session_start();
 
 function create_task($conn, $name, $category, $description, $level, $cost, $hosting, $files, $flag, $solution, $readme)
 {

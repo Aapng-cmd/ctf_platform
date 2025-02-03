@@ -1,6 +1,5 @@
 <?php
 require_once "config.php";
-session_start();
 $conn = start_conn();
 
 $error = "";

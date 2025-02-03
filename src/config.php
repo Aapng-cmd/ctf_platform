@@ -1,6 +1,11 @@
 <?php
 session_start();
 
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+
 function start_conn()
 {
     // Use environment variables
@@ -20,7 +25,10 @@ function start_conn()
 
 function is_logged()
 {
-    session_start();
+	if (session_status() === PHP_SESSION_NONE) {
+		session_start();
+	}
+	
     if (empty($_SESSION))
     {
     	header("Location: login.php");

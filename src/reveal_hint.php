@@ -1,7 +1,6 @@
 <?php
 require_once "config.php"; // Include your database configuration
 
-session_start();
 
 is_logged();
 
