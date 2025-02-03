@@ -164,17 +164,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['zip_file'])) {
                 	$extractToPath = "./tasks/" . $parsedData['title'];
                 	mkdir($extractToPath, 0755, true);
                 	$zip->extractTo($extractToPath);
-                	chdir($extractToPath);
-                	
-		            $command = 'docker-compose up -d && docker ps';
-					exec($command, $output, $return_var);
+//                	chdir($extractToPath);
+//                	
+//		            $command = 'docker-compose up -d && docker ps';
+//					exec($command, $output, $return_var);
 
-					if ($return_var === 0) {
-						echo "Docker Compose started successfully in $extractToPath.";
-					} else {
-						echo "Failed to start Docker Compose. Return code: $return_var.<br>";
-						#print_r($output);
-					}
+//					if ($return_var === 0) {
+//						echo "Docker Compose started successfully in $extractToPath.";
+//					} else {
+//						echo "Failed to start Docker Compose. Return code: $return_var.<br>";
+//					}
                 }
                 
             } else {

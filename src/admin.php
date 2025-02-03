@@ -53,6 +53,38 @@ function change_task_state($conn, $task_id, $new_status) {
     $stmt->bind_param("ii", $new_status, $task_id);
     $stmt->execute();
     $stmt->close();
+    
+    $stmt = $conn->prepare("SELECT name FROM tasks WHERE id = ?");
+	$stmt->bind_param("i", $task_id);
+	$stmt->execute();
+	$stmt->store_result();
+	$stmt->bind_result($task_name);
+	$stmt->fetch();
+	$stmt->close();
+	
+	$extractToPath = "./tasks/" . $task_name;
+    
+    if ($new_status === 1)
+    {
+    	$command = 'docker-compose up -d && docker ps';
+    }
+    else
+    {
+    	$command = 'docker-compose down -v';
+    }
+    
+    if (file_exists($extractToPath . "/" . "docker-compose.yml"))
+    {
+    	chdir($extractToPath);
+        
+		exec($command, $output, $return_var);
+
+		if ($return_var === 0) {
+			echo "Docker Compose used successfully in $extractToPath.";
+		} else {
+			echo "Failed to use Docker Compose. Return code: $return_var.<br>";
+		}
+    }
 }
 
 if (isset($_POST['task_id']))

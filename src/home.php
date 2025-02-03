@@ -344,6 +344,7 @@ $conn->close();
         <a href="profile.php">Профиль</a>
         <a href="logout.php">Выйти</a>
         <?php if ($user_info['group_type'] !== 0) {echo '<a href="create.php">Создать задачу</a>';} ?>
+        <?php if ($user_info['group_type'] !== 0) {echo '<a href="admin.php">Админка</a>';} ?>
         <div class="categories">
             <h3>Категории</h3>
             <?php
