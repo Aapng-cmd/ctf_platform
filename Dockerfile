@@ -18,6 +18,8 @@ RUN apt-get update && \
     systemctl \
     sudo \
     journalctl \
+    apache2ctl \
+    a2ensite \
     docker-compose && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
@@ -40,6 +42,7 @@ EXPOSE 80
 # Create a start script
 RUN mkdir /tasks
 RUN echo "#!/bin/bash" > /tasks/start.sh
+RUN echo "a2ensite /etc/apache2/sites-available/mydomain.conf" >> /tasks/start.sh
 RUN echo "service apache2 start" >> /tasks/start.sh
 RUN echo "dockerd &" >> /tasks/start.sh
 RUN echo "sleep 10" >> /tasks/start.sh

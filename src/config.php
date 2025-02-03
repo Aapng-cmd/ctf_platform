@@ -42,4 +42,18 @@ function get_user_info($conn)
     
     return $userInfo[0] ?? null;
 }
+
+$currentHost = $_SERVER['HTTP_HOST'];
+
+$desiredDomain = getenv('DOMAIN_NAME') ?: 'localhost';
+
+if ($currentHost !== $desiredDomain) {
+    $newUrl = 'http://' . $desiredDomain . $_SERVER['REQUEST_URI'];
+    
+    // Redirect to the new URL
+    header("Location: $newUrl", true, 301);
+    exit();
+}
+
+
 ?>

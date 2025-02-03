@@ -11,6 +11,7 @@ services:
       - ./src:/var/www/html  # Mount the src directory to the container
       - ./php.ini:/etc/php/7.4/apache2/php.ini
       - ./php.ini:/etc/php/7.4/cli/php.ini
+      - ./mydomain.conf:/etc/apache2/sites-available/mydomain.conf
     links:
       - mysql:mysql
     dns:
@@ -24,6 +25,7 @@ services:
       - MYSQL_DATABASE=site
       - MYSQL_USER=user_site
       - MYSQL_PASSWORD=password
+      - DOMAIN_NAME=mydomain.local
 
   mysql:
     image: mysql:8.0
