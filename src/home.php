@@ -23,8 +23,27 @@ function get_categories($conn)
 
 function get_category_tasks($conn, $category_id)
 {
-    $stmt = $conn->prepare("SELECT * FROM tasks WHERE category_id = ? AND status = 1");
-    $stmt->bind_param("i", $category_id);
+    $stmt = $conn->prepare("
+        SELECT 
+			id, 
+			name, 
+			category_id, 
+			description, 
+			level, 
+			author_id, 
+			cost - COALESCE((SELECT SUM(hints.cost) FROM hints WHERE task_id = tasks.id AND EXISTS (SELECT 1 FROM user_task_costs WHERE user_id = ? AND hint_id = hints.id)), 0) AS cost,
+			hosting, 
+			files, 
+			flag, 
+			solution, 
+			status, 
+			readme 
+		FROM 
+			tasks 
+		WHERE 
+			category_id = ? AND status = 1;
+    ");
+    $stmt->bind_param("ii", $_SESSION['id'], $category_id);
     $stmt->execute();
     $result = $stmt->get_result();
     
@@ -92,7 +111,6 @@ $user_info = get_user_info($conn);
 $categories = get_categories($conn);
 $category_solved = get_amount_solved_tasks_by_user($conn);
 $conn->close();
-
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -379,8 +397,9 @@ $conn->close();
             if (!empty($tasks)) {
                 echo '<div class="task-list">';
                 foreach ($tasks as $task) {
+                	$_ = (in_array($task['id'], $solved_tasks)) ? "background-color: green;" : "";
                     echo '
-                    <div class="task-item" style="border: 1px solid #ccc; padding: 10px; margin: 10px; cursor: pointer;" onclick="fetchTaskDetails(' . htmlspecialchars($task['id']) . ')">
+                    <div class="task-item" style="border: 1px solid #ccc; padding: 10px; margin: 10px; cursor: pointer; ' . $_ . '" onclick="fetchTaskDetails(' . htmlspecialchars($task['id']) . ')">
                         <h2>' . htmlspecialchars($task['name']) . '</h2>
                         <p>Стоимость: <strong>' . htmlspecialchars($task['cost']) . '</strong></p>
                     </div>';

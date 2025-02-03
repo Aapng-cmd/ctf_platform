@@ -19,10 +19,14 @@ if (isset($_GET['hint_id']))
         echo json_encode(['success' => false, 'description' => 'Проблемка, мда']);
     $stmt->close();
     
-    /*
-    Add ability to substract cost of hint from cost of task
-    */
-    $conn->close();
+    $stmt = $conn->prepare("
+		INSERT INTO user_task_costs (user_id, hint_id) VALUES (?, ?)
+	");
+
+	$stmt->bind_param("ii", $_SESSION['id'], $hint_id);
+	$stmt->execute();
+	$stmt->close();
+	$conn->close();
 }
 
 

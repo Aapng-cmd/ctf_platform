@@ -10,7 +10,7 @@ if (isset($_GET['id'])) {
     $query = "
         SELECT 
             tasks.name, 
-            tasks.cost, 
+            tasks.cost - COALESCE((SELECT SUM(hints.cost) FROM hints WHERE task_id = tasks.id AND EXISTS (SELECT 1 FROM user_task_costs WHERE user_id = ? AND hint_id = hints.id)), 0) AS cost, 
             tasks.description,
             tasks.hosting,
             tasks.files,
@@ -24,7 +24,7 @@ if (isset($_GET['id'])) {
     ";
     
     $stmt = $conn->prepare($query);
-    $stmt->bind_param('i', $taskId);
+    $stmt->bind_param('ii', $_SESSION['id'], $taskId);
     $stmt->execute();
     $result = $stmt->get_result();
 

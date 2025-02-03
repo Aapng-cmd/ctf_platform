@@ -61,15 +61,29 @@ CREATE TABLE hints (
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
 
+CREATE TABLE user_task_costs (
+    user_id INT NOT NULL,
+    hint_id INT NOT NULL,
+    UNIQUE (user_id, hint_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (hint_id) REFERENCES hints(id) ON DELETE CASCADE
+);
+
 DELIMITER //
 
--- Trigger to update score when a task is solved
 CREATE TRIGGER after_task_solved
 AFTER INSERT ON solved_tasks
 FOR EACH ROW
 BEGIN
     UPDATE users
-    SET score = score + (SELECT cost FROM tasks WHERE id = NEW.task_id)
+    SET score = score + (SELECT cost FROM tasks WHERE id = NEW.task_id) 
+                  - COALESCE((SELECT SUM(hints.cost) 
+                              FROM hints 
+                              WHERE task_id = NEW.task_id 
+                              AND EXISTS (SELECT 1 
+                                          FROM user_task_costs 
+                                          WHERE user_id = NEW.user_id 
+                                          AND hint_id = hints.id)), 0)
     WHERE id = NEW.user_id;
 END; //
 
