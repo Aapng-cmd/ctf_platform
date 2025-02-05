@@ -43,6 +43,13 @@ CREATE TABLE tasks (
     FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
+CREATE TABLE tasks_ratings (
+    task_id INT PRIMARY KEY,
+    rating FLOAT DEFAULT 0,
+    numbers_of_ratings INT DEFAULT 0,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
+
 -- Create solved_tasks table
 CREATE TABLE solved_tasks (
     user_id INT NOT NULL,
