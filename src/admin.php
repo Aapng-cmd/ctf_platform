@@ -11,15 +11,15 @@ if ($user_info['group_type'] !== 1) {
 }
 
 function get_sorted_users($conn) {
-    $stmt = $conn->prepare("SELECT id, username, score FROM users ORDER BY score");
+    $stmt = $conn->prepare("SELECT id, username, score, group_type FROM users ORDER BY score");
     $stmt->execute();
     $stmt->store_result();
-    $stmt->bind_result($id, $username, $score);
+    $stmt->bind_result($id, $username, $score, $group_type);
     
     $result = [];
     
     while ($stmt->fetch()) {
-        $result[] = ['id' => $id, 'username' => $username, 'score' => $score];
+        $result[] = ['id' => $id, 'username' => $username, 'score' => $score, 'group_type' => $group_type];
     }
     
     $stmt->close();
@@ -271,6 +271,10 @@ $conn->close();
                         <th>ID</th>
                         <th>Имя пользователя</th>
                         <th>Очки</th>
+                        <th id="sortGroupType" style="cursor: pointer;">
+							Кто ты, воин? 
+							<span id="sortArrow" style="font-size: 0.8em; margin-left: 5px;"></span>
+						</th>
                     </tr>
                 </thead>
                 <tbody id="userTableBody">
@@ -279,6 +283,7 @@ $conn->close();
                             <td><?php echo $user['id']; ?></td>
                             <td><a href="#" class="userLink" data-id="<?php echo $user['id']; ?>"><?php echo $user['username']; ?></a></td>
                             <td><?php echo $user['score']; ?></td>
+                            <td><?php echo (($user['group_type'] === 0) ? "Пользователь" : (($user['group_type'] === 1) ? "Создатель" : "Админ")); ?></td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -386,6 +391,66 @@ $conn->close();
                 document.getElementById('popup').style.display = 'none';
                 document.getElementById('overlay').style.display = 'none';
             });
+        </script>
+        <script>
+		    let currentSortOrder = 'ASC'; // Default sort order
+			let clickCount = 0; // Count the number of clicks
+			const sortArrow = document.getElementById('sortArrow');
+
+			document.getElementById('sortGroupType').addEventListener('click', function() {
+				const userTableBody = document.getElementById('userTableBody');
+				const rows = Array.from(userTableBody.querySelectorAll('tr'));
+
+				// Check the number of clicks to determine the action
+				clickCount++;
+
+				if (clickCount === 1) {
+					// First click: Sort by group_type in ascending order
+					rows.sort((a, b) => {
+						const groupTypeA = getGroupTypeValue(a);
+						const groupTypeB = getGroupTypeValue(b);
+						return groupTypeA - groupTypeB; // Ascending order
+					});
+					sortArrow.textContent = '▲'; // Up arrow
+				} else if (clickCount === 2) {
+					// Second click: Sort by group_type in descending order
+					rows.sort((a, b) => {
+						const groupTypeA = getGroupTypeValue(a);
+						const groupTypeB = getGroupTypeValue(b);
+						return groupTypeB - groupTypeA; // Descending order
+					});
+					sortArrow.textContent = '▼'; // Down arrow
+				} else {
+					// Third click: Reset to default order (unsorted)
+					clickCount = 0; // Reset click count
+					rows.sort((a, b) => {
+						return a.rowIndex - b.rowIndex; // Default order based on original index
+					});
+					sortArrow.textContent = ''; // No arrow
+				}
+
+				// Clear the table body and append sorted rows
+				userTableBody.innerHTML = '';
+				rows.forEach(row => userTableBody.appendChild(row));
+			});
+
+			// Helper function to get the group_type value from a row
+			function getGroupTypeValue(row) {
+				const groupTypeCell = row.querySelector('td:nth-child(4)'); // Adjust index if necessary
+				const groupTypeText = groupTypeCell.textContent.trim();
+
+				// Convert group type text to a comparable value
+				switch (groupTypeText) {
+					case 'Пользователь':
+						return 0;
+					case 'Создатель':
+						return 1;
+					case 'Админ':
+						return 2;
+					default:
+						return 3; // Fallback for unknown types
+				}
+			}
         </script>
 
         <style>
