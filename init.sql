@@ -46,7 +46,14 @@ CREATE TABLE tasks (
 CREATE TABLE tasks_ratings (
     task_id INT PRIMARY KEY,
     rating FLOAT DEFAULT 0,
-    numbers_of_ratings INT DEFAULT 0,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
+
+CREATE TABLE user_rated_task (
+	task_id INT,
+	user_id INT,
+	UNIQUE (user_id, task_id),
+	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
 
@@ -116,6 +123,7 @@ BEGIN
 END; //
 
 DELIMITER ;
+
 /*
 DELIMITER //
 

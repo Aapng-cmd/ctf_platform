@@ -15,7 +15,8 @@ if (isset($_GET['id'])) {
             tasks.hosting,
             tasks.files,
             COUNT(solved_tasks.user_id) AS solutions_count, 
-            users.username AS first_blood_user
+            users.username AS first_blood_user,
+            COALESCE((SELECT rating / (SELECT COUNT(*) FROM user_rated_task WHERE task_id = ?) FROM tasks_ratings WHERE task_id = ?), 0) AS task_rating
         FROM tasks
         LEFT JOIN solved_tasks ON tasks.id = solved_tasks.task_id
         LEFT JOIN users ON solved_tasks.first_blood_id = users.id
@@ -24,7 +25,7 @@ if (isset($_GET['id'])) {
     ";
     
     $stmt = $conn->prepare($query);
-    $stmt->bind_param('ii', $_SESSION['id'], $taskId);
+    $stmt->bind_param('iiii', $_SESSION['id'], $taskId, $taskId, $taskId);
     $stmt->execute();
     $result = $stmt->get_result();
 
@@ -38,12 +39,20 @@ if (isset($_GET['id'])) {
     while ($stmt_hint->fetch()) {
         $hints[] = ['hint_id' => $hint_id, 'hint_cost' => $hint_cost];
     }
+    
+    $stmt_solved = $conn->prepare("SELECT task_id FROM solved_tasks WHERE task_id = ?");
+    $stmt_solved->bind_param("i", $taskId);
+    $stmt_solved->execute();
+    $stmt_solved->store_result();
+    $stmt_solved->bind_result($task_id);
+    $stmt_solved->fetch();
 
     if ($task = $result->fetch_assoc()) {
         $response = [
             'success' => true,
             'task' => $task,
-            'hints' => $hints
+            'hints' => $hints,
+            'isTaskSolved' => (($task_id !== null) ? true : false)
         ];
         echo json_encode($response);
     } else {
@@ -52,6 +61,7 @@ if (isset($_GET['id'])) {
 
     $stmt->close();
     $stmt_hint->close();
+    $stmt_solved->close();
 } else {
     echo json_encode(['success' => false, 'message' => 'No task ID provided']);
 }

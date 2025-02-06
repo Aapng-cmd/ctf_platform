@@ -32,12 +32,12 @@ function get_category_tasks($conn, $category_id)
 			level, 
 			author_id, 
 			cost - COALESCE((SELECT SUM(hints.cost) FROM hints WHERE task_id = tasks.id AND EXISTS (SELECT 1 FROM user_task_costs WHERE user_id = ? AND hint_id = hints.id)), 0) AS cost,
-			hosting, 
-			files, 
-			flag, 
+			hosting,
+			files,
+			flag,
 			solution, 
 			status, 
-			readme 
+			readme
 		FROM 
 			tasks 
 		WHERE 
@@ -75,7 +75,7 @@ function get_solved_tasks($conn)
     
     $stmt->close();
     
-    return $result[0];
+    return ($result[0] === null) ? [] : $result[0];
 }
 
 function get_amount_solved_tasks_by_user($conn) {
@@ -366,6 +366,54 @@ $conn->close();
         color: red; /* Red color for error messages */
         font-weight: bold; /* Bold text for emphasis */
     }
+    
+    #ratingForm {
+		background-color: #2a2a2a; /* Dark background for the form */
+		border: 1px solid #00ffcc; /* Border color matching the theme */
+		border-radius: 5px; /* Rounded corners */
+		padding: 15px; /* Padding for the form */
+		margin-top: 20px; /* Space above the form */
+		box-shadow: 0 4px 10px rgba(0, 255, 255, 0.2); /* Subtle shadow effect */
+	}
+
+	#ratingForm label {
+		color: #00ffcc; /* Text color for the label */
+		font-size: 18px; /* Font size for better visibility */
+		margin-bottom: 10px; /* Space below the label */
+		display: block; /* Make the label a block element */
+	}
+
+	#ratingInput {
+		width: 100%; /* Full width for the select */
+		padding: 10px; /* Padding for the select */
+		border: 1px solid #00ffcc; /* Border color */
+		border-radius: 5px; /* Rounded corners */
+		background-color: #2a2a2a; /* Match background color */
+		color: #00ffcc; /* Text color */
+		margin-bottom: 15px; /* Space below the select */
+		font-size: 16px; /* Font size for the select */
+	}
+
+	#ratingInput:focus {
+		outline: none; /* Remove default outline */
+		border-color: #ff007f; /* Change border color on focus */
+		box-shadow: 0 0 5px rgba(255, 0, 127, 0.5); /* Add shadow on focus */
+	}
+
+	#ratingButton {
+		background-color: #00ffcc; /* Button background color */
+		color: #000; /* Button text color */
+		padding: 10px 15px; /* Padding inside the button */
+		border: none; /* Remove border */
+		border-radius: 5px; /* Rounded corners for the button */
+		cursor: pointer; /* Pointer cursor on hover */
+		font-size: 16px; /* Font size for the button */
+		transition: background 0.3s; /* Transition for hover effect */
+	}
+
+	#ratingButton:hover {
+		background-color: #ff007f; /* Darker color on hover */
+	}
     </style>
 </head>
 <body>
@@ -421,6 +469,7 @@ $conn->close();
                 <p id="taskFileURLp"><strong>Ссылка на файлы для решения:</strong> <a class="tasks_url" id="taskFileURL"></a></p>
                 <p><strong>Количество решений:</strong> <span id="taskSolutionsCount"></span></p>
                 <p><strong>Первая кровь:</strong> <span id="firstBloodUser"></span></p>
+                <p><strong>Рейтинг задачи:</strong> <span id="taskRating"></span></p>
                 <div id="hintSection" style="display:none;">
                     <strong>Подсказки:</strong>
                     <ul id="taskHintsList"></ul> <!-- List for hints -->
@@ -431,9 +480,61 @@ $conn->close();
                     <input type="text" id="flagInput" name="flag" required>
                     <button type="submit" class="flag_send">Отправить</button>
                 </form>
+                <form id="ratingForm" onsubmit="submitRating(event)" hidden>
+					<input type="hidden" id="taskIdInput" name="task_id" required>
+					<label for="ratingInput">Оцените задачу</label><br>
+					<div>
+						<select id="ratingInput" name="rating" required>
+							<option value="" disabled selected>Выберите оценку</option>
+							<option value="1">1</option>
+							<option value="2">2</option>
+							<option value="3">3</option>
+							<option value="4">4</option>
+							<option value="5">5</option>
+						</select>
+					</div>
+					<button id='ratingButton' type="submit">Отправить оценку</button>
+				</form>
             </div>
         </div>
     </div>
+    
+    <script>
+		function submitRating(event) {
+			event.preventDefault(); // Prevent default form submission
+			const formData = new FormData(document.getElementById('ratingForm'));
+			
+			// Extract rating and task_id from the form data
+			const rating = formData.get('rating');
+			const taskId = formData.get('task_id');
+
+			// Construct the URL with both rating and task_id
+			const url = `submit_rating.php?rating=${rating}&task_id=${taskId}`;
+
+			fetch(url)
+			.then(response => response.text())
+			.then(data => {
+				// Create a notification element
+				const notification = document.createElement('div');
+				notification.className = 'notification';
+
+				// Set the notification message based on the response
+				notification.textContent = data.includes('success') ? 'Оценка успешно отправлена!' : 'Ошибка: ' + data;
+				notification.style.backgroundColor = data.includes('success') ? 'green' : 'red'; // Set color based on response
+
+				// Append notification to the body
+				document.body.appendChild(notification);
+
+				// Remove the notification after 5 seconds
+				setTimeout(() => {
+				    notification.remove();
+				}, 5000);
+			})
+			.catch(error => {
+				console.error('Error submitting rating:', error);
+			});
+		}
+	</script>
 
     <script>
         function fetchTaskDetails(taskId) {
@@ -462,6 +563,7 @@ $conn->close();
 
                         document.getElementById('taskSolutionsCount').innerText = data.task.solutions_count;
                         document.getElementById('firstBloodUser').innerText = data.task.first_blood_user;
+                        document.getElementById('taskRating').innerText = data.task.task_rating;
 
                         // Fetch hints for the task
                         document.getElementById('taskHintsList').innerHTML = ''; // Clear previous hints
@@ -472,6 +574,14 @@ $conn->close();
                             li.onclick = () => revealHint(hint.hint_id); // Add click event to fetch hint description
                             document.getElementById('taskHintsList').appendChild(li);
                         });
+                        
+                        if (data.isTaskSolved)
+                        	document.getElementById('ratingForm').hidden = false;
+                        else
+                        	document.getElementById('ratingForm').hidden = true;
+                        
+                        document.getElementById('taskIdInput').value = taskId;
+                        
                         document.getElementById('hintSection').style.display = 'block'; // Show hint section
 
                         // Show modal
