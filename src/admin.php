@@ -11,15 +11,15 @@ if ($user_info['group_type'] !== 1) {
 }
 
 function get_sorted_users($conn) {
-    $stmt = $conn->prepare("SELECT id, username, score, group_type FROM users ORDER BY score");
+    $stmt = $conn->prepare("SELECT id, username, score, group_type, (SELECT COUNT(*) FROM tasks WHERE author_id = users.id) AS created_tasks_number FROM users ORDER BY score");
     $stmt->execute();
     $stmt->store_result();
-    $stmt->bind_result($id, $username, $score, $group_type);
+    $stmt->bind_result($id, $username, $score, $group_type, $created_tasks_number);
     
     $result = [];
     
     while ($stmt->fetch()) {
-        $result[] = ['id' => $id, 'username' => $username, 'score' => $score, 'group_type' => $group_type];
+        $result[] = ['id' => $id, 'username' => $username, 'score' => $score, 'group_type' => $group_type, 'created_tasks_number' => $created_tasks_number];
     }
     
     $stmt->close();
@@ -30,7 +30,7 @@ function get_sorted_users($conn) {
 $users = get_sorted_users($conn);
 
 function get_tasks($conn) {
-    $tasks_query = "SELECT id, (SELECT name FROM categories WHERE id = category_id) AS category, name, readme, status FROM tasks";
+    $tasks_query = "SELECT id, (SELECT name FROM categories WHERE id = category_id) AS category, name, readme, status, (SELECT username FROM users WHERE id = author_id) AS author, author_id FROM tasks";
     $tasks_result = $conn->query($tasks_query);
 
     $tasks_by_category = [];
@@ -40,7 +40,10 @@ function get_tasks($conn) {
                 'id' => $row['id'],
                 'name' => $row['name'],
                 'status' => $row['status'],
-                'readme' => $row['readme']
+                'readme' => $row['readme'],
+                'author' => $row['author'],
+                'author_id' => $row['author_id'],
+                
             ];
         }
     }
@@ -62,7 +65,7 @@ function change_task_state($conn, $task_id, $new_status) {
 	$stmt->close();
 	
 	$extractToPath = "./tasks/" . $task_name;
-    
+    $output_line = "";
     if ($new_status === 1)
     {
     	$command = 'docker-compose up -d && docker ps';
@@ -79,16 +82,18 @@ function change_task_state($conn, $task_id, $new_status) {
 		exec($command, $output, $return_var);
 
 		if ($return_var === 0) {
-			echo "Docker Compose used successfully in $extractToPath.";
+			$output_line = "<p>Docker Compose used successfully in $extractToPath.</p><br>";
 		} else {
-			echo "Failed to use Docker Compose. Return code: $return_var.<br>";
+			$output_line = "<p>Failed to use Docker Compose. Return code: $return_var.</p><br>";
 		}
     }
+    return $output_line;
 }
 
+$output_line = "";
 if (isset($_POST['task_id']))
 {
-    change_task_state($conn, intval($_POST['task_id']), intval($_POST['status']));
+    $output_line = change_task_state($conn, intval($_POST['task_id']), intval($_POST['status']));
 }
 
 
@@ -297,6 +302,7 @@ $conn->close();
                     <tr>
                         <th>Категория</th>
                         <th>Задачи</th>
+                        <th>Автор</th>
                         <th>Статус</th>
                     </tr>
                 </thead>
@@ -310,6 +316,7 @@ $conn->close();
                                         <?php echo $task['name']; ?>
                                     </a>
                                 </td>
+                                <td><a href="#" class="userLink" data-id="<?php echo $task['author_id']; ?>"><?php echo $task['author']; ?></a></td>
                                 <td>
                                     <form action="" method="POST" class="statusForm">
                                         <select name="status" class="taskStatus">
@@ -327,6 +334,7 @@ $conn->close();
                     <?php endforeach; ?>
                 </tbody>
             </table>
+            <?php echo $output_line; ?>
         </div>
 
         <script>
@@ -556,7 +564,10 @@ $conn->close();
                 const userId = e.target.getAttribute('data-id');
                 const user = <?php echo json_encode($users); ?>.find(u => u.id == userId);
                 if (user) {
-                    document.getElementById('popupContent').innerText = `ID: ${user.id}\nИмя пользователя: ${user.username}\nОчки: ${user.score}`;
+                	if (user.group_type)
+                		document.getElementById('popupContent').innerText = `ID: ${user.id}\nИмя пользователя: ${user.username}\nОчки: ${user.score}\nКол-во созданных задач: ${user.created_tasks_number}`;
+                	else
+                    	document.getElementById('popupContent').innerText = `ID: ${user.id}\nИмя пользователя: ${user.username}\nОчки: ${user.score}`;
                     document.getElementById('popup').style.display = 'block';
                     document.getElementById('overlay').style.display = 'block';
                 }

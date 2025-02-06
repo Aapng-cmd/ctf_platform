@@ -89,7 +89,7 @@ function parse_readme($content) {
     return $parsedData;
 }
 
-function getDockerComposeUrl($dockerComposeFile, $hosting, $zip) {
+function getDockerComposeUrl($dockerComposeFile, $hosting, $zip, $newPort) {
     // Read the contents of the file
     $contents = $zip->getFromName($dockerComposeFile);
     
@@ -102,7 +102,7 @@ function getDockerComposeUrl($dockerComposeFile, $hosting, $zip) {
     $inPortsSection = false;
 
     // Loop through each line to find the ports
-    foreach ($lines as $line) {
+    foreach ($lines as $index => $line) {
         // Trim whitespace from the line
         $line = trim($line);
 
@@ -118,22 +118,55 @@ function getDockerComposeUrl($dockerComposeFile, $hosting, $zip) {
             if (strpos($line, '-') === 0) {
                 // Extract the port mapping (e.g., "8080:80" or "3306")
                 $portMapping = trim(substr($line, 1)); // Remove the leading dash
-                $portMapping = explode(':', $portMapping); // Split by colon
+                $portMappingParts = explode(':', $portMapping); // Split by colon
 
-                // Get the host port (the first part)
-                $port = $portMapping[0]; // This will be the host port
-                break; // Exit the loop after finding the first port
+                // Replace the host port (the first part) with the new port
+                $portMappingParts[0] = $newPort; // Set the new port
+
+                // Reconstruct the port mapping line
+                $lines[$index] = '      - ' . implode(':', $portMappingParts);
+                break; // Exit the loop after modifying the first port
             }
         }
     }
-    
-    if ($hosting === "Y" && $port !== null) {
-        return "http://127.0.0.1:" . $port;
+
+    // Write the modified contents back to the zip file
+    $newContents = implode("\n", $lines);
+    $zip->addFromString($dockerComposeFile, $newContents);
+
+    if ($hosting === "Y" && isset($portMappingParts[0])) {
+        return "http://127.0.0.1:" . $portMappingParts[0];
     }
 
     // Return null or an empty string if conditions are not met
     return null;
 }
+
+function findPort($startPort = 1000, $maxPort = 65535) {
+    // Get the list of used ports using netstat
+    $usedPorts = [];
+    $output = [];
+    exec("netstat -tuln", $output); // Execute netstat command
+
+    // Parse the output to find used ports
+    foreach ($output as $line) {
+        // Match lines that contain the port information
+        if (preg_match('/:(\d+)\s/', $line, $matches)) {
+            $usedPorts[] = (int)$matches[1]; // Store the port number
+        }
+    }
+
+    // Search for an available port
+    for ($port = $startPort; $port <= $maxPort; $port++) {
+        if (!in_array($port, $usedPorts)) {
+            return $port; // Return the first available port
+        }
+    }
+
+    return null; // No available port found
+}
+
+
 
 function create_hint($conn, $hint_data, $taskname)
 {
@@ -177,16 +210,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['zip_file'])) {
                 $readmeContent = $zip->getFromName('README.md');
                 $parsedData = parse_readme($readmeContent);
                 #print_r($parsedData);
-                $url = getDockerComposeUrl("docker-compose.yml", $parsedData['hosting'], $zip);
+                $url = getDockerComposeUrl("docker-compose.yml", $parsedData['hosting'], $zip, findPort());
                 
-                if ($parsedData['files'] !== "N")
+                if ($parsedData['files'] != "N")
                 {
                     $files = "./uploads/" . $parsedData['title'];
-                    $zip->extractTo($files);
+                    $zip->extractTo($files, $parsedData['files']);
+                    $files .= "/" . $parsedData['files'];
                 }
                 else { $files = null; }
                 
-                create_task($conn, $parsedData['title'], $parsedData['category'], $parsedData['description'], $parsedData['level'], $parsedData['cost'], $url, $files . "/" . $parsedData['files'], $parsedData['flag'], $parsedData['solution'], base64_encode($readmeContent));
+                #echo $files;
+                
+                create_task($conn, $parsedData['title'], $parsedData['category'], $parsedData['description'], $parsedData['level'], $parsedData['cost'], $url, $files, $parsedData['flag'], $parsedData['solution'], base64_encode($readmeContent));
                 
                 if (isset($parsedData['hints']))
                 {
