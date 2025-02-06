@@ -1,6 +1,6 @@
 <?php
 require_once "config.php";
-
+is_logged();
 $conn = start_conn();
 
 if (isset($_GET['id'])) {

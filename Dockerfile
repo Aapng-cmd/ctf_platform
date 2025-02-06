@@ -12,6 +12,7 @@ RUN apt-get update && \
     libapache2-mod-php \
     php-mysqli \
     php-zip \
+    php-gd \
     zip \
     nano \
     docker.io \
