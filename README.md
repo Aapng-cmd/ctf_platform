@@ -39,10 +39,19 @@ cd ctf_platform
 
 Отредактируйте `docker-compose.yml` и `init.sql` для настройки учетных данных базы данных.
 
-3. **Запустите платформу (рекомендуется Docker)**
+3. **Запустите платформу через Docker**
 
 ```bash
 docker-compose up -d
+```
+
+**Или через apache2 (рекомендуется)**
+
+```bash
+cp -r src/* /var/www/html/
+cp php.ini /etc/php/{apache_version}/apache2/php.ini
+sudo systemctl start mysql
+sudo systemctl start apache
 ```
 
 4. **Получите доступ к платформе**

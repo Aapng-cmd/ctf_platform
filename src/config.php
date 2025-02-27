@@ -8,7 +8,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 function start_conn()
 {
-    // Use environment variables
+    
     $db_host = getenv('MYSQL_HOST') ?: '127.0.0.1';
     $db_username = getenv('MYSQL_USER') ?: 'user_site';
     $db_password = getenv('MYSQL_PASSWORD') ?: 'password';
@@ -58,7 +58,6 @@ $desiredDomain = getenv('DOMAIN_NAME') ?: 'localhost';
 if ($currentHost !== $desiredDomain) {
     $newUrl = 'http://' . $desiredDomain . $_SERVER['REQUEST_URI'];
     
-    // Redirect to the new URL
     header("Location: $newUrl", true, 301);
     exit();
 }

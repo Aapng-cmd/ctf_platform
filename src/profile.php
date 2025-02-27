@@ -6,11 +6,6 @@ $conn = start_conn();
 is_logged();
 
 $user_info = get_user_info($conn);
-if ($user_info['group_type'] === 0)
-{
-	header("Location: home.php");
-	exit;
-}
 
 function get_completed_tasks($conn)
 {

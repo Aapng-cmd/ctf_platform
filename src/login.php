@@ -27,7 +27,7 @@ function login($conn, $username, $password)
     }
 }
 
-function register($conn, $username, $password, $user_type) {
+function register($conn, $username, $password, $user_type, $invite_code) {
     $user_type = intval($user_type);
     
     if ($user_type !== 1 and $user_type !== 0) {
@@ -39,13 +39,40 @@ function register($conn, $username, $password, $user_type) {
     $stmt->bind_param("s", $username);
     $stmt->execute();
     $stmt->store_result();
+    
     if ($stmt->num_rows > 0) {
         $stmt->close();
         return false;
     } else {
-        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+        if ($invite_code !== null && $invite_code !== "")
+        {
+            $stmt = $conn->prepare("SELECT id FROM invitations WHERE invite_code = ?");
+            $stmt->bind_param("s", $invite_code);
+            
+            if ($stmt->execute())
+            {
+                $stmt->store_result();
+                $stmt->bind_result($id);
+                $stmt->fetch();
+                
+                if ($id === null) { return false; }
+                else
+                {
+                    $stmt = $conn->prepare("DELETE FROM invitations WHERE id = ?");
+                    $stmt->bind_param("i", $id);
+                    if (!$stmt->execute())
+                    {
+                        die("Connection to db failed");
+                        return false;
+                    }
+                }
+            }
+        }
+        
         $stmt = $conn->prepare("INSERT INTO users (username, password, group_type) VALUES (?, ?, ?)");
         $stmt->bind_param("ssi", $username, $hashedPassword, $user_type);
+        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+        
         
         if ($stmt->execute()) {
             $stmt->close();
@@ -70,6 +97,7 @@ if (isset($_POST['register']))
     $username = isset($_POST['username']) ? $_POST['username'] : null;
     $password = isset($_POST['password']) ? $_POST['password'] : null;
     $group_type = isset($_POST['group_type']) ? $_POST['group_type'] : null;
+    $invite_code = isset($_POST['inviteCode']) ? $_POST['inviteCode'] : null;
     #echo "$username|$password|$group_type";
     if ($username === null or $password === null or $group_type === null)
     {
@@ -77,7 +105,7 @@ if (isset($_POST['register']))
     }
     else
     {
-        if (!register($conn, $username, $password, $group_type))
+        if (!register($conn, $username, $password, $group_type, $invite_code))
         {
             $error = "Что-то пошло не так";
         }
@@ -302,14 +330,32 @@ $conn->close();
             </div>
             <div class="form-group">
                 <label for="group_type">Кто ты?</label>
-                <select id="group_type" name="group_type" required>
+                <select id="group_type" name="group_type" required onchange="toggleInviteCode()">
                     <option value="0">Пользователь</option>
                     <option value="1">Создатель</option>
                 </select>
             </div>
+            <div class="form-group" id="inviteCodeGroup" style="display: none;"> <!-- Initially hidden -->
+                <label for="inviteCode">Код подтверждения</label>
+                <input type="text" id="inviteCode" name="inviteCode">
+            </div>
             <button type="submit" name="register">Регистрация</button>
             <button type="button" class="switch-button" id="switchToLogin">Уже смешарик? Войти</button>
         </form>
+
+        <script>
+            function toggleInviteCode() {
+                const groupType = document.getElementById('group_type').value;
+                const inviteCodeGroup = document.getElementById('inviteCodeGroup');
+                
+                // Show invite code field if "Создатель" is selected, otherwise hide it
+                if (groupType === "1") {
+                    inviteCodeGroup.style.display = 'block'; // Show invite code field
+                } else {
+                    inviteCodeGroup.style.display = 'none'; // Hide invite code field
+                }
+            }
+        </script>
         
         <p><?php echo isset($error) ? htmlspecialchars($error) : ''; ?></p>
     </div>

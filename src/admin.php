@@ -5,7 +5,7 @@ $conn = start_conn();
 is_logged();
 
 $user_info = get_user_info($conn);
-if ($user_info['group_type'] !== 1) {
+if ($user_info['group_type'] === 2) {
     header("Location: home.php");
     exit;
 }

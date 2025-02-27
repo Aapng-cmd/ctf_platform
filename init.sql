@@ -1,13 +1,10 @@
 DROP DATABASE IF EXISTS site;
-DROP USER IF EXISTS user_site;
+DROP USER IF EXISTS 'user_site'@'%';
 
--- Create database
-CREATE DATABASE site;
+CREATE DATABASE site CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 
--- Use the database
 USE site;
 
--- Create users table
 CREATE TABLE users (
     id INT AUTO_INCREMENT,
     username VARCHAR(255) UNIQUE NOT NULL,
@@ -16,15 +13,18 @@ CREATE TABLE users (
     score INT DEFAULT 0,
     first_blood_count INT DEFAULT 0,
     PRIMARY KEY (id)
-);
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 
--- Create categories table
 CREATE TABLE categories (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL UNIQUE
-);
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 
--- Create tasks table
+CREATE TABLE invitations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    invite_code VARCHAR(255) NOT NULL UNIQUE
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+
 CREATE TABLE tasks (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL UNIQUE,
@@ -41,31 +41,29 @@ CREATE TABLE tasks (
     readme TEXT NOT NULL,
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE,
     FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE SET NULL
-);
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 
 CREATE TABLE tasks_ratings (
     task_id INT PRIMARY KEY,
     rating FLOAT DEFAULT 0,
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
-);
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 
 CREATE TABLE user_rated_task (
-	task_id INT,
-	user_id INT,
-	UNIQUE (user_id, task_id),
-	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    task_id INT,
+    user_id INT,
+    UNIQUE (user_id, task_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
-);
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 
--- Create solved_tasks table
 CREATE TABLE solved_tasks (
     user_id INT NOT NULL,
     task_id INT NOT NULL,
     first_blood_id INT NOT NULL DEFAULT 0,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
-    -- UNIQUE (user_id, task_id)
-);
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 
 CREATE TABLE hints (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -73,7 +71,7 @@ CREATE TABLE hints (
     description TEXT NOT NULL,
     cost INT,
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
-);
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 
 CREATE TABLE user_task_costs (
     user_id INT NOT NULL,
@@ -81,8 +79,9 @@ CREATE TABLE user_task_costs (
     UNIQUE (user_id, hint_id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (hint_id) REFERENCES hints(id) ON DELETE CASCADE
-);
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 
+-- Create triggers
 DELIMITER //
 
 CREATE TRIGGER after_task_solved
