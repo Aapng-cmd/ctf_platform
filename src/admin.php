@@ -1,11 +1,11 @@
 <?php
-require_once "config.php"; // Include your database configuration
+require_once "config.php";
 $conn = start_conn();
 
 is_logged();
 
 $user_info = get_user_info($conn);
-if ($user_info['group_type'] === 2) {
+if ($user_info['group_type'] !== 2) {
     header("Location: home.php");
     exit;
 }
@@ -30,7 +30,22 @@ function get_sorted_users($conn) {
 $users = get_sorted_users($conn);
 
 function get_tasks($conn) {
-    $tasks_query = "SELECT id, (SELECT name FROM categories WHERE id = category_id) AS category, name, readme, status, (SELECT username FROM users WHERE id = author_id) AS author, author_id FROM tasks";
+    $tasks_query = "
+        SELECT 
+            t.id, 
+            (SELECT name FROM categories WHERE id = t.category_id) AS category, 
+            t.name, 
+            t.readme, 
+            t.status, 
+            (SELECT username FROM users WHERE id = t.author_id) AS author, 
+            t.author_id,
+            -- Fetch hints as a JSON array
+            (SELECT JSON_ARRAYAGG(JSON_OBJECT('hint', h.description, 'cost', h.cost)) 
+             FROM hints h 
+             WHERE h.task_id = t.id) AS hints
+        FROM tasks t
+    ";
+    
     $tasks_result = $conn->query($tasks_query);
 
     $tasks_by_category = [];
@@ -43,13 +58,12 @@ function get_tasks($conn) {
                 'readme' => $row['readme'],
                 'author' => $row['author'],
                 'author_id' => $row['author_id'],
-                
+                'hints' => json_decode($row['hints']) // Decode the JSON array of hints
             ];
         }
     }
     return $tasks_by_category;
 }
-
 function change_task_state($conn, $task_id, $new_status) {
     $stmt = $conn->prepare("UPDATE tasks SET status = ? WHERE id = ?");
     $stmt->bind_param("ii", $new_status, $task_id);
@@ -64,15 +78,23 @@ function change_task_state($conn, $task_id, $new_status) {
 	$stmt->fetch();
 	$stmt->close();
 	
-	$extractToPath = "./tasks/" . $task_name;
+	$extractToPath = "/var/www/ctf_tasks/" . $task_name;
     $output_line = "";
     if ($new_status === 1)
     {
-    	$command = 'docker-compose up -d && docker ps';
+    	$command = 'docker-compose up -d --build && docker ps';
     }
     else
     {
     	$command = 'docker-compose down -v';
+    }
+    
+    if ($new_status === 2)
+    {
+        $stmt = $conn->prepare("DELETE FROM tasks WHERE id = ?");
+        $stmt->bind_param("i", $task_id);
+        $stmt->execute();
+        $stmt->close();
     }
     
     if (file_exists($extractToPath . "/" . "docker-compose.yml"))
@@ -312,8 +334,13 @@ $conn->close();
                             <tr class="taskRow">
                                 <td><?php echo $category; ?></td>
                                 <td>
-                                    <a href="#" class="taskLink" data-description="<?php echo htmlspecialchars(base64_decode($task['readme'])); ?>">
-                                        <?php echo $task['name']; ?>
+                                    <a href="#" class="taskLink" 
+                                       data-id="<?php echo $task['id']; ?>" 
+                                       data-description="<?php echo htmlspecialchars($task['description']); ?>" 
+                                       data-readme="<?php echo htmlspecialchars(base64_decode($task['readme'])); ?>" 
+                                       data-flag="<?php echo htmlspecialchars($task['flag']); ?>" 
+                                       data-hints='<?php echo json_encode($hints); ?>'> <!-- Assuming you fetch hints from the database -->
+                                       <?php echo $task['name']; ?>
                                     </a>
                                 </td>
                                 <td><a href="#" class="userLink" data-id="<?php echo $task['author_id']; ?>"><?php echo $task['author']; ?></a></td>
@@ -546,6 +573,150 @@ $conn->close();
     </div>
 
     <script>
+        document.getElementById('popup').addEventListener('click', function(e) {
+            if (e.target.id === 'saveTask') {
+                const taskId = document.getElementById('taskId').value;
+                const taskDescription = document.getElementById('taskDescription').value;
+                const taskReadme = document.getElementById('taskReadme').value;
+                const taskFlag = document.getElementById('taskFlag').value;
+
+                // Gather hints
+                const hints = Array.from(document.querySelectorAll('.hint')).map(hint => ({
+                    text: hint.querySelector('.hintText').value,
+                    cost: hint.querySelector('.hintCost').value
+                }));
+
+                // Send the updated task data to the server
+                fetch('update_task.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        id: taskId,
+                        description: taskDescription,
+                        readme: btoa(unescape(encodeURIComponent(taskReadme))),
+                        flag: taskFlag,
+                        hints: hints,
+                    }),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Task updated successfully!');
+                        location.reload(); // Reload the page to see changes
+                    } else {
+                        alert('Failed to update task.');
+                    }
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                });
+            }
+        });
+        
+        // Function to create the hint element
+        function createHintElement(hint) {
+            const hintDiv = document.createElement('div');
+            hintDiv.classList.add('hint');
+            console.log(hint);
+            hintDiv.innerHTML = `
+                <input type="text" class="hintText" value="${hint.hint_dscription}">
+                <input type="number" class="hintCost" value="${hint.hint_cost}" min="0">
+                <button class="deleteHint">Удалить</button>
+            `;
+            return hintDiv;
+        }
+
+        // Function to populate the popup with task details
+        function populatePopup(task) {
+            const { id, name, description, readme, flag, hints } = task;
+
+            // Set popup content
+            document.getElementById('popupContent').innerHTML = `
+                <h4>${name}</h4>
+                <p><strong>Описание:</strong> <textarea id="taskDescription">${description}</textarea></p>
+                <p><strong>README:</strong> <textarea id="taskReadme">${readme}</textarea></p>
+                <p><strong>Флаг:</strong> <input type="text" id="taskFlag" value="${flag}"></p>
+                <div id="hintsContainer">
+                    <h5>Подсказки:</h5>
+                    ${hints.length > 0 ? hints.map(createHintElement).map(hintElement => hintElement.outerHTML).join('') : '<p>Нет подсказок.</p>'}
+                    <button id="addHint">Добавить подсказку</button>
+                </div>
+                <input type="hidden" id="taskId" value="${id}">
+                <button id="saveTask">Сохранить изменения</button>
+            `;
+            // console.log(hints);
+        }
+
+        // Function to show the popup
+        function showPopup() {
+            document.getElementById('popup').style.display = 'block';
+            document.getElementById('overlay').style.display = 'block';
+        }
+
+        // Function to handle adding a new hint
+        function handleAddHint() {
+            const newHint = createHintElement({ hint: '', cost: 0 });
+            document.getElementById('hintsContainer').appendChild(newHint);
+        }
+
+        // Function to handle deleting a hint
+        function handleDeleteHint(event) {
+            if (event.target.classList.contains('deleteHint')) {
+                event.target.parentElement.remove();
+            }
+        }
+
+        // Function to handle task link click
+        function handleTaskLinkClick(event) {
+            event.preventDefault();
+            
+            const taskId = this.getAttribute('data-id');
+
+            // Fetch task details from the new PHP script
+            fetch(`get_full_task_info.php?id=${taskId}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        const task = {
+                            id: taskId,
+                            name: data.task.name,
+                            description: data.task.description,
+                            readme: decodeURIComponent(escape(atob(data.task.readme))),
+                            flag: data.task.flag,
+                            cost: data.task.cost,
+                            first_blood_user: data.task.first_blood_user,
+                            solutions_count: data.task.solutions_count,
+                            hints: data.hints || [] // Default to an empty array if hints are null
+                        };
+
+                        populatePopup(task);
+                        showPopup();
+
+                        // Add event listeners
+                        document.getElementById('addHint').addEventListener('click', handleAddHint);
+                        document.getElementById('hintsContainer').addEventListener('click', handleDeleteHint);
+                    } else {
+                        alert(data.message); // Show error message if task not found
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching task details:', error);
+                    alert('An error occurred while fetching task details.');
+                });
+        }
+
+        // Attach event listeners to task links
+        document.querySelectorAll('.taskLink').forEach(link => {
+            link.addEventListener('click', handleTaskLinkClick);
+        });
+        
         // Event listeners
         document.getElementById('viewUsers').addEventListener('click', function() {
             document.getElementById('userList').style.display = 'block';

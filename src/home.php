@@ -444,6 +444,7 @@ $conn->close();
             $tasks = get_category_tasks($conn, $_GET['category_id']);
             if (!empty($tasks)) {
                 echo '<div class="task-list">';
+                if ($solved_tasks === null) { $solved_tasks = []; }
                 foreach ($tasks as $task) {
                 	$_ = (in_array($task['id'], $solved_tasks)) ? "background-color: green;" : "";
                     echo '
@@ -466,7 +467,7 @@ $conn->close();
                 <p><strong>Стоимость:</strong> <span id="taskCost"></span></p>
                 <p><strong>Описание:</strong> <span id="taskDescription"></span></p>
                 <p id="taskURLp"><strong>Ссылка:</strong> <a class="tasks_url" id="taskURL"></a></p>
-                <p id="taskFileURLp"><strong>Ссылка на файлы для решения:</strong> <a class="tasks_url" id="taskFileURL"></a></p>
+                <p id="taskFileURLp"><strong>Ссылка на файлы для решения:</strong> <div class="tasks_url" id="taskFilesURL"></div></p>
                 <p><strong>Количество решений:</strong> <span id="taskSolutionsCount"></span></p>
                 <p><strong>Первая кровь:</strong> <span id="firstBloodUser"></span></p>
                 <p><strong>Рейтинг задачи:</strong> <span id="taskRating"></span></p>
@@ -555,8 +556,18 @@ $conn->close();
                             document.getElementById('taskURLp').hidden = true;
                         }
                         if (data.task.files) {
-                            document.getElementById('taskFileURL').innerText = data.task.files.split('/').pop();
-                            document.getElementById('taskFileURL').href = data.task.files;
+                            const allFiles = data.task.files.split(';');
+                            const taskFilesURLDiv = document.getElementById('taskFilesURL');
+                            taskFilesURLDiv.innerHTML = '';
+
+                            allFiles.forEach(file => {
+                                const anchor = document.createElement('a');
+                                anchor.href = file;
+                                anchor.innerText = file.split('/').pop();
+                                anchor.target = '_blank';
+                                taskFilesURLDiv.appendChild(anchor);
+                                taskFilesURLDiv.appendChild(document.createElement('br'));
+                            });
                         } else {
                             document.getElementById('taskFileURLp').hidden = true;
                         }

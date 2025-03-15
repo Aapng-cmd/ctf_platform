@@ -1,9 +1,9 @@
 <?php
 session_start();
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+//if (session_status() === PHP_SESSION_NONE) {
+//    session_start();
+//}
 
 
 function start_conn()
@@ -51,16 +51,16 @@ function get_user_info($conn)
     return $userInfo[0] ?? null;
 }
 
-$currentHost = $_SERVER['HTTP_HOST'];
+//$currentHost = $_SERVER['HTTP_HOST'];
 
-$desiredDomain = getenv('DOMAIN_NAME') ?: 'localhost';
+//$desiredDomain = getenv('DOMAIN_NAME') ?: 'localhost';
 
-if ($currentHost !== $desiredDomain) {
-    $newUrl = 'http://' . $desiredDomain . $_SERVER['REQUEST_URI'];
-    
-    header("Location: $newUrl", true, 301);
-    exit();
-}
+//if ($currentHost !== $desiredDomain) {
+//    $newUrl = 'http://' . $desiredDomain . $_SERVER['REQUEST_URI'];
+//    
+//    header("Location: $newUrl", true, 301);
+//    exit();
+//}
 
 
 ?>

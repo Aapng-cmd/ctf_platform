@@ -14,7 +14,7 @@ function get_users_count($conn) {
 }
 
 function get_tasks_count($conn) {
-    $sql = "SELECT COUNT(*) AS task_count FROM tasks";
+    $sql = "SELECT COUNT(*) AS task_count FROM tasks WHERE status = 1";
     $stmt = $conn->prepare($sql);
     $stmt->execute();
     $stmt->bind_result($task_count);

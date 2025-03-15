@@ -33,9 +33,11 @@ WORKDIR /var/www/html
 
 # Copy the source code into the container
 COPY src/ .
+RUN mkdir -p /var/www/tasks
 
 # Set permissions (optional, adjust as needed)
 RUN chown -R www-data:www-data /var/www/html
+RUN chown -R www-data:www-data /var/www/tasks
 
 # Expose port 80
 EXPOSE 80

@@ -17,6 +17,10 @@ if ($user_info['group_type'] === 0)
 function create_task($conn, $name, $category, $description, $level, $cost, $hosting, $files, $flag, $solution, $readme)
 {
     $category_id = get_category_id($conn, $category);
+    if ($category_id === null)
+    {
+        return false;
+    }
     $stmt = $conn->prepare("INSERT INTO tasks (name, category_id, description, level, author_id, cost, hosting, files, flag, solution, readme) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     
     // Sanitize inputs and assign to variables
@@ -124,7 +128,7 @@ function getDockerComposeUrl($dockerComposeFile, $hosting, $zip, $newPort) {
                 $portMappingParts[0] = $newPort; // Set the new port
 
                 // Reconstruct the port mapping line
-                $lines[$index] = '      - ' . implode(':', $portMappingParts);
+                $lines[$index] = '      - "' . implode(':', $portMappingParts);
                 break; // Exit the loop after modifying the first port
             }
         }
@@ -155,10 +159,32 @@ function findPort($startPort = 1000, $maxPort = 65535) {
             $usedPorts[] = (int)$matches[1]; // Store the port number
         }
     }
+    
+    // Fetch forbidden ports from the MySQL database
+
+    $forbiddenPorts = [];
+    $conn = start_conn();
+    if ($conn) {
+        $stmt = $conn->prepare("SELECT hosting FROM tasks");
+        $stmt->execute();
+        $stmt->store_result();
+        $stmt->bind_result($hosting);
+
+        while ($stmt->fetch()) {
+            if (preg_match('/:(\d+)/', $hosting, $matches)) {
+                $forbiddenPorts[] = (int)$matches[1]; // Store the port number
+            }
+        }
+        $stmt->close(); // Close the statement
+    }
+    $conn->close(); // Close the connection
+
+    // Combine used ports from netstat and forbidden ports from the database
+    $allUsedPorts = array_merge($usedPorts, $forbiddenPorts);
 
     // Search for an available port
     for ($port = $startPort; $port <= $maxPort; $port++) {
-        if (!in_array($port, $usedPorts)) {
+        if (!in_array($port, $usedPorts) && !in_array($port, $forbiddenPorts)) {
             return $port; // Return the first available port
         }
     }
@@ -182,7 +208,6 @@ function create_hint($conn, $hint_data, $taskname)
     $stmt->close();
     return false;
 }
-
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['zip_file'])) {
     try
@@ -209,20 +234,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['zip_file'])) {
             if ($zip->locateName('README.md') !== false) {
                 $readmeContent = $zip->getFromName('README.md');
                 $parsedData = parse_readme($readmeContent);
-                #print_r($parsedData);
                 $url = getDockerComposeUrl("docker-compose.yml", $parsedData['hosting'], $zip, findPort());
                 
                 if ($parsedData['files'] != "N")
                 {
-                    $files = "./uploads/" . $parsedData['title'];
-                    $zip->extractTo($files, $parsedData['files']);
-                    $files .= "/" . $parsedData['files'];
+                    $files = "";
+                    $files_prefix = "./uploads/" . $parsedData['title'];
+                    $inside_files = explode(";", $parsedData['files']);
+                    foreach ($inside_files as $inside_file) {
+                        $zip->extractTo($files_prefix . "/", $inside_file);
+                        $files .= $files_prefix . "/" . $inside_file . ";";
+                    }
                 }
                 else { $files = null; }
                 
-                #echo $files;
-                
-                create_task($conn, $parsedData['title'], $parsedData['category'], $parsedData['description'], $parsedData['level'], $parsedData['cost'], $url, $files, $parsedData['flag'], $parsedData['solution'], base64_encode($readmeContent));
+                if (!create_task($conn, $parsedData['title'], $parsedData['category'], $parsedData['description'], $parsedData['level'], $parsedData['cost'], $url, $files, $parsedData['flag'], $parsedData['solution'], base64_encode($readmeContent)))
+                {
+                    $errors[] = "Проверь все файлы и правильность создания README";
+                }
                 
                 if (isset($parsedData['hints']))
                 {
@@ -236,7 +265,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['zip_file'])) {
                 
                 if ($zip->locateName('docker-compose.yml') !== false)
                 {
-                    $extractToPath = "./tasks/" . $parsedData['title'];
+                    $extractToPath = "/var/www/ctf_tasks/" . $parsedData['title'];
                     mkdir($extractToPath, 0755, true);
                     $zip->extractTo($extractToPath);
 //                    chdir($extractToPath);
@@ -404,7 +433,7 @@ Easy
 150
 
 ## Files
-N (file.ext)
+N (file1.ext;file2.ext)
 
 ## Hosting
 Y/N
@@ -426,5 +455,6 @@ maybe, heh
             <button type="submit">Загрузить</button>
         </form>
     </div>
+    <p><?php print_r($errors); ?></p>
 </body>
 </html>
