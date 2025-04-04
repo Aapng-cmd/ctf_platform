@@ -35,6 +35,8 @@ $conn->close();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="js/nextparticle.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Pirata+One&amp;display=swap" rel="stylesheet">
     <title>CTF Платформа</title>
     <style>
         body {
@@ -71,7 +73,7 @@ $conn->close();
             color: #ff007f; /* Change color on hover */
         }
 
-        .container {
+        .main-container {
             text-align: center;
             margin-top: 60px; /* Space for the fixed navbar */
         }
@@ -120,6 +122,81 @@ $conn->close();
         .info-section h2 {
             margin-top: 0;
         }
+        
+        /* CAT */
+        .glitch {
+            font-size: 1em;
+            color: #ffffff;
+            position: relative;
+            animation: glitch 0.05s infinite, flicker 2s infinite;
+        }
+
+        .flicker-text1 {
+            color: #c3c3c3;
+            animation: flicker1 2s infinite;
+        }
+
+        @keyframes glitch {
+            0%, 100% {
+                transform: translate(0);
+            }
+            10% {
+                transform: translate(-0.5px, 0.5px);
+            }
+            20% {
+                transform: translate(-0.5px, -0.5px);
+            }
+            30% {
+                transform: translate(0.5px, 0.5px);
+            }
+            40% {
+                transform: translate(0.5px, -0.5px);
+            }
+            50% {
+                transform: translate(-0.5px, 0.5px);
+            }
+            60% {
+                transform: translate(-0.5px, -0.5px);
+            }
+            70% {
+                transform: translate(0.5px, 0.5px);
+            }
+            80% {
+                transform: translate(0.5px, -0.5px);
+            }
+            90% {
+                transform: translate(-0.5px, 0.5px);
+            }
+        }
+
+        @keyframes flicker {
+            0%, 18%, 22%, 25%, 53%, 57%, 100% {
+                opacity: 1;
+            }
+            20%, 24%, 55% {
+                opacity: 0;
+            }
+        }
+
+        .container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+
+        .center-half {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: white;
+            text-align: center;
+            position: relative;
+            z-index: 5;
+            /* background-color: #000000; */
+        }
     </style>
 </head>
 <body>
@@ -127,7 +204,7 @@ $conn->close();
         <a href="login.php">Войти</a>
     </div>
 
-    <div class="container">
+    <div class="main-container">
         <h1>Киберпанк Панель</h1>
         <div class="bar-container">
             <div class="bar">
@@ -147,6 +224,32 @@ $conn->close();
             <p>Эта CTF платформа предназначена для проведения соревнований по компьютерной безопасности. Здесь вы можете найти задачи различной сложности и уровни. Вы также можете отслеживать прогресс своих решений и взаимодействовать с другими участниками.</p>
             <p>Пожалуйста, убедитесь, что при загрузке решений вы следуете всем рекомендациям и инструкциям, предоставленным для каждой задачи.</p>
         </div>
+    </div>
+    <div class="container">
+        <!-- Left Section -->
+        <div class="center-half">
+            <div class="interactive-section" id="logo-center">
+                <img src="images/tongue.png" alt="obey" style="display: none;">
+            </div>
+        </div>
+
+    <script src="js/main.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+
+            new NextParticle({
+                image: document.querySelector("#logo-center img"),
+                color: "#FF0000",
+                maxWidth: 500,
+                maxHeight: 500,
+                particleGap: 2,
+                noise: 15,
+                speed: 0.1,
+            });
+        });
+    </script>
+
+
     </div>
 </body>
 </html>
