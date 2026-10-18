@@ -1,0 +1,8 @@
+{{template "head" .}}
+{{template "navbar" .}}
+<main class="container py-5 text-center">
+  <h1 class="display-5 tr-msg">{{.Title}}</h1>
+  <p class="lead text-muted tr-msg">{{.Message}}</p>
+  <a class="btn btn-primary" href="/" data-i18n="Go home">Go home</a>
+</main>
+{{template "footer" .}}

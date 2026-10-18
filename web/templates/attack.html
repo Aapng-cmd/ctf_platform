@@ -1,0 +1,98 @@
+{{template "head" .}}
+{{template "navbar" .}}
+{{template "flashes" .}}
+<main class="container py-4" id="attack-page" data-round="{{if .Round}}{{.Round.Number}}{{end}}" data-left="{{.SecondsLeft}}">
+  <div class="page-head">
+    <h2 class="mb-0" data-i18n="attack.title">Attack-Defense</h2>
+    <div class="round-chip">
+      <span data-i18n="attack.round">Round</span>
+      <strong id="atkRound">{{if .Round}}{{.Round.Number}}{{else}}—{{end}}</strong>
+      <span class="round-chip-sep">·</span>
+      <span id="atkLeft" class="text-muted"></span>
+    </div>
+  </div>
+
+  <form id="adFlagForm" class="flag-row mb-2">
+    <input class="form-control" id="adFlag" placeholder="{{.FlagHint}}" autocomplete="off" spellcheck="false">
+    <button class="btn btn-primary" type="submit" data-i18n="attack.submit">Submit stolen flag</button>
+  </form>
+  <div id="adFlagMsg" class="mb-3"></div>
+
+  {{if .Token}}
+  <section class="panel curl-panel mb-4">
+    <div class="curl-head">
+      <h5 class="mb-0" data-i18n="attack.curlTitle">Submit from a script</h5>
+      <button type="button" class="btn btn-sm btn-outline-light" data-copy="#curlCmd"><i class="bi bi-clipboard"></i> <span data-i18n="attack.copy">Copy</span></button>
+    </div>
+    <pre class="curl-cmd" id="curlCmd">curl -s -X POST {{.SubmitURL}} \
+  -H 'X-Team-Token: {{.Token}}' \
+  -H 'Content-Type: application/json' \
+  -d '["{{.FlagHint}}"]'</pre>
+    <div class="curl-foot">
+      <span class="small text-muted" data-i18n="attack.curlHint">Up to 500 flags in one JSON array; each gets its own status in the reply.</span>
+      {{if .Captain}}
+      <form method="post" action="/attack/token" data-confirm="confirm.newToken">
+        <input type="hidden" name="nonce" value="{{.CSRF}}">
+        <button class="btn btn-sm btn-outline-warning" type="submit" data-i18n="attack.newToken">New token</button>
+      </form>
+      {{end}}
+    </div>
+  </section>
+  {{end}}
+
+  {{if and .Captain .Mine}}
+  <h5 data-i18n="attack.vulnbox">Your vulnbox</h5>
+  <form method="post" action="/attack/hosts" class="mb-4">
+    <input type="hidden" name="nonce" value="{{.CSRF}}">
+    {{range .Mine}}
+    <div class="row g-2 mb-2 align-items-center">
+      <div class="col-md-3 fw-semibold">{{.Service.Name}}</div>
+      <div class="col-md-6"><input class="form-control" name="host_{{.ID}}" value="{{.Host}}" placeholder="10.0.1.10"></div>
+      <div class="col-md-3"><input class="form-control" type="text" inputmode="numeric" name="port_{{.ID}}" value="{{if .Port}}{{.Port}}{{else if .Service.Port}}{{.Service.Port}}{{end}}" placeholder="8080"></div>
+    </div>
+    {{end}}
+    <button class="btn btn-outline-light btn-sm" type="submit" data-i18n="attack.save">Save hosts</button>
+  </form>
+  {{end}}
+
+  <h5 data-i18n="attack.network">Network</h5>
+  <div class="table-responsive mb-4">
+    <table class="table table-sm align-middle">
+      <thead><tr><th data-i18n="score.team">Team</th><th data-i18n="attack.service">Service</th><th data-i18n="attack.endpoint">Address</th><th data-i18n="admin.status">Status</th></tr></thead>
+      <tbody>
+        {{range .Instances}}
+        {{$st := index $.Checks (adKey .TeamID .ServiceID)}}
+        <tr>
+          <td class="text-nowrap"><a href="/teams/{{.TeamID}}">{{.Team.Name}}</a></td>
+          <td class="text-nowrap">{{.Service.Name}}</td>
+          <td class="text-nowrap font-monospace small">{{if .Host}}{{.Host}}:{{if .Port}}{{.Port}}{{else}}{{.Service.Port}}{{end}}{{else}}—{{end}}</td>
+          <td><span class="st-badge {{if eq $st "OK"}}up{{else if $st}}down{{else}}none{{end}}" data-st-team="{{.TeamID}}" data-st-svc="{{.ServiceID}}" data-i18n="st.{{if $st}}{{$st}}{{else}}WAIT{{end}}">{{if $st}}{{$st}}{{else}}—{{end}}</span></td>
+        </tr>
+        {{else}}
+        <tr><td colspan="4" class="text-muted" data-i18n="attack.noServices">No services yet.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+
+  <h5 data-i18n="attack.recent">Recent attacks</h5>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead><tr><th data-i18n="admin.time">Time</th><th data-i18n="admin.attacker">Attacker</th><th data-i18n="admin.victim">Victim</th><th data-i18n="admin.service">Service</th><th data-i18n="admin.pts">Points</th></tr></thead>
+      <tbody>
+        {{range .Steals}}
+        <tr>
+          <td class="text-nowrap">{{formatDate .Date}}</td>
+          <td>{{.Attacker.Name}}</td>
+          <td>{{.Victim.Name}}</td>
+          <td>{{index $.ServiceNames .ServiceID}}</td>
+          <td>+{{.Points}}</td>
+        </tr>
+        {{else}}
+        <tr><td colspan="5" class="text-muted" data-i18n="attack.noSteals">No steals yet.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</main>
+{{template "footer" .}}

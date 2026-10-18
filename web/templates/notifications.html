@@ -1,0 +1,18 @@
+{{template "head" .}}
+{{template "navbar" .}}
+{{template "flashes" .}}
+<main class="container py-4" style="max-width: 800px;">
+  <h2 data-i18n="Notifications">Notifications</h2>
+  {{range .Notifications}}
+  <article class="card mb-3">
+    <div class="card-body">
+      <h5>{{.Title}}</h5>
+      <div class="small text-muted mb-2">{{formatDate .Date}}</div>
+      <div class="markdown-body">{{md .Content}}</div>
+    </div>
+  </article>
+  {{else}}
+  <p class="text-muted" data-i18n="There are no notifications yet.">There are no notifications yet.</p>
+  {{end}}
+</main>
+{{template "footer" .}}

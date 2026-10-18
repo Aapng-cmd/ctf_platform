@@ -1,0 +1,26 @@
+{{template "head" .}}
+{{template "navbar" .}}
+<div class="admin-wrap">
+{{template "adminnav" .}}
+<main class="admin-main">
+  {{template "flashes" .}}
+  <h2 class="tr-msg">{{.Title}}</h2>
+  <form method="post" {{if .Page.ID}}action="/admin/pages/{{.Page.ID}}"{{else}}action="/admin/pages"{{end}}>
+    <input type="hidden" name="nonce" value="{{.CSRF}}">
+    <div class="mb-3"><label class="form-label" data-i18n="Title">Title</label><input class="form-control" name="title" value="{{.Page.Title}}" required></div>
+    <div class="mb-3"><label class="form-label" data-i18n="Route">Route</label><input class="form-control" name="route" value="{{.Page.Route}}" required placeholder="about"></div>
+    <div class="mb-3"><label class="form-label" data-i18n="Content (Markdown)">Content (Markdown)</label><textarea class="form-control" name="content" rows="14">{{.Page.Content}}</textarea></div>
+    <div class="form-check"><input class="form-check-input" type="checkbox" name="draft" {{if .Page.Draft}}checked{{end}}><label class="form-check-label" data-i18n="Draft">Draft</label></div>
+    <div class="form-check"><input class="form-check-input" type="checkbox" name="hidden" {{if .Page.Hidden}}checked{{end}}><label class="form-check-label" data-i18n="Hidden">Hidden</label></div>
+    <div class="form-check mb-3"><input class="form-check-input" type="checkbox" name="auth_required" {{if .Page.AuthRequired}}checked{{end}}><label class="form-check-label" data-i18n="Authentication required">Authentication required</label></div>
+    <button class="btn btn-primary" type="submit" data-i18n="Save">Save</button>
+  </form>
+  {{if .Page.ID}}
+  <form class="mt-3" method="post" action="/admin/pages/{{.Page.ID}}/delete" data-confirm="confirm.deletePage">
+    <input type="hidden" name="nonce" value="{{.CSRF}}">
+    <button class="btn btn-danger" type="submit" data-i18n="Delete">Delete</button>
+  </form>
+  {{end}}
+</main>
+</div>
+{{template "footer" .}}

@@ -1,0 +1,23 @@
+{{template "head" .}}
+{{template "navbar" .}}
+{{template "flashes" .}}
+<main class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0" data-i18n="Teams">Teams</h2>
+    {{if .User}}<div><a class="btn btn-outline-light btn-sm" href="/teams/new" data-i18n="Create">Create</a> <a class="btn btn-primary btn-sm" href="/teams/join" data-i18n="Join">Join</a></div>{{end}}
+  </div>
+  <table class="table table-hover">
+    <thead><tr><th data-i18n="Team">Team</th><th data-i18n="Members">Members</th><th hidden data-i18n="Affiliation">Affiliation</th><th hidden data-i18n="Country">Country</th></tr></thead>
+    <tbody>
+      {{range .Teams}}
+      <tr>
+        <td><a href="/teams/{{.ID}}">{{.Name}}</a></td>
+        <td>{{len .Members}}</td>
+        <td hidden>{{.Affiliation}}</td>
+        <td hidden data-country="{{.Country}}">{{countryName .Country}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</main>
+{{template "footer" .}}

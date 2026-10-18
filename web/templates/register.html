@@ -1,0 +1,40 @@
+{{template "head" .}}
+{{template "navbar" .}}
+{{template "flashes" .}}
+<main class="auth-shell">
+  <div class="auth-card">
+  <h2 data-i18n="register.title">Register</h2>
+  <form method="post">
+    <input type="hidden" name="nonce" value="{{.CSRF}}">
+    <div class="mb-3">
+      <label class="form-label" data-i18n="register.name">User Name</label>
+      <input class="form-control" name="name" required>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" data-i18n="register.email">Email</label>
+      <input class="form-control" type="email" name="email" required>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" data-i18n="register.password">Password</label>
+      <input class="form-control" type="password" name="password" required minlength="6">
+    </div>
+    <div class="mb-3" hidden>
+      <label class="form-label" data-i18n="Website">Website</label>
+      <input class="form-control" name="website">
+    </div>
+    <div class="mb-3" hidden>
+      <label class="form-label" data-i18n="Affiliation">Affiliation</label>
+      <input class="form-control" name="affiliation">
+    </div>
+    <div class="mb-3" hidden>
+      <label class="form-label" data-i18n="Country">Country</label>
+      <select class="form-select" name="country">
+        <option value=""></option>
+        {{range .Countries}}<option value="{{.Code}}">{{.Name}}</option>{{end}}
+      </select>
+    </div>
+    <button class="btn btn-primary w-100" type="submit" data-i18n="register.submit">Submit</button>
+  </form>
+  </div>
+</main>
+{{template "footer" .}}

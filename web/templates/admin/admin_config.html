@@ -1,0 +1,85 @@
+{{template "head" .}}
+{{template "navbar" .}}
+<div class="admin-wrap">
+{{template "adminnav" .}}
+<main class="admin-main">
+  {{template "flashes" .}}
+  <h2 data-i18n="Config">Config</h2>
+  <form method="post">
+    <input type="hidden" name="nonce" value="{{.CSRF}}">
+    <div class="mb-3"><label class="form-label" data-i18n="CTF Name">CTF Name</label><input class="form-control" name="ctf_name" value="{{index .Config "ctf_name"}}"></div>
+    <div class="mb-3"><label class="form-label" data-i18n="Description">Description</label><textarea class="form-control" name="ctf_description" rows="3">{{index .Config "ctf_description"}}</textarea></div>
+    <div class="mb-3">
+      <label class="form-label" data-i18n="Game Mode">Game Mode</label>
+      <select class="form-select" name="game_mode">
+        {{$g := index .Config "game_mode"}}
+        <option value="jeopardy" {{if eq $g "jeopardy"}}selected{{end}} data-i18n="Jeopardy">Jeopardy</option>
+        <option value="attack_defense" {{if eq $g "attack_defense"}}selected{{end}} data-i18n="Attack-Defense">Attack-Defense</option>
+        <option value="mixed" {{if eq $g "mixed"}}selected{{end}} data-i18n="Mixed">Mixed</option>
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" data-i18n="User Mode">User Mode</label>
+      <select class="form-select" name="user_mode">
+        <option value="users" {{if eq (index .Config "user_mode") "users"}}selected{{end}} data-i18n="Users">Users</option>
+        <option value="teams" {{if eq (index .Config "user_mode") "teams"}}selected{{end}} data-i18n="Teams">Teams</option>
+      </select>
+    </div>
+    <div class="row">
+      <div class="col mb-3"><label class="form-label" data-i18n="Start">Start</label><input class="form-control" name="start" value="{{index .Config "start"}}" placeholder="2006-01-02T15:04"></div>
+      <div class="col mb-3"><label class="form-label" data-i18n="End">End</label><input class="form-control" name="end" value="{{index .Config "end"}}"></div>
+      <div class="col mb-3"><label class="form-label" data-i18n="Freeze">Freeze</label><input class="form-control" name="freeze" value="{{index .Config "freeze"}}"></div>
+    </div>
+    <div class="row">
+      <div class="col mb-3">
+        <label class="form-label" data-i18n="Challenge Visibility">Challenge Visibility</label>
+        <select class="form-select" name="challenge_visibility">
+          {{$v := index .Config "challenge_visibility"}}
+          <option value="public" {{if eq $v "public"}}selected{{end}} data-i18n="public">public</option>
+          <option value="private" {{if eq $v "private"}}selected{{end}} data-i18n="private">private</option>
+          <option value="admins_only" {{if eq $v "admins_only"}}selected{{end}} data-i18n="admins_only">admins_only</option>
+        </select>
+      </div>
+      <div class="col mb-3">
+        <label class="form-label" data-i18n="Score Visibility">Score Visibility</label>
+        <select class="form-select" name="score_visibility">
+          {{$v := index .Config "score_visibility"}}
+          <option value="public" {{if eq $v "public"}}selected{{end}} data-i18n="public">public</option>
+          <option value="private" {{if eq $v "private"}}selected{{end}} data-i18n="private">private</option>
+          <option value="hidden" {{if eq $v "hidden"}}selected{{end}} data-i18n="hidden">hidden</option>
+          <option value="admins_only" {{if eq $v "admins_only"}}selected{{end}} data-i18n="admins_only">admins_only</option>
+        </select>
+      </div>
+      <div class="col mb-3">
+        <label class="form-label" data-i18n="Account Visibility">Account Visibility</label>
+        <select class="form-select" name="account_visibility">
+          {{$v := index .Config "account_visibility"}}
+          <option value="public" {{if eq $v "public"}}selected{{end}} data-i18n="public">public</option>
+          <option value="private" {{if eq $v "private"}}selected{{end}} data-i18n="private">private</option>
+          <option value="admins_only" {{if eq $v "admins_only"}}selected{{end}} data-i18n="admins_only">admins_only</option>
+        </select>
+      </div>
+      <div class="col mb-3">
+        <label class="form-label" data-i18n="Registration">Registration</label>
+        <select class="form-select" name="registration_visibility">
+          {{$v := index .Config "registration_visibility"}}
+          <option value="public" {{if eq $v "public"}}selected{{end}} data-i18n="public">public</option>
+          <option value="private" {{if eq $v "private"}}selected{{end}} data-i18n="private">private</option>
+        </select>
+      </div>
+    </div>
+    <div class="mb-3"><label class="form-label" data-i18n="Max Team Size (0 = unlimited)">Max Team Size (0 = unlimited)</label><input class="form-control" name="max_team_size" value="{{index .Config "max_team_size"}}"></div>
+    <button class="btn btn-primary" type="submit" data-i18n="Save">Save</button>
+  </form>
+  <hr>
+  <h5 data-i18n="Reset competition data">Reset competition data</h5>
+  <form method="post" action="/admin/reset" data-confirm="confirm.reset">
+    <input type="hidden" name="nonce" value="{{.CSRF}}">
+    <div class="input-group" style="max-width:360px">
+      <input class="form-control" name="confirm" placeholder="Type RESET" data-i18n-placeholder="Type RESET">
+      <button class="btn btn-danger" type="submit" data-i18n="Reset">Reset</button>
+    </div>
+  </form>
+</main>
+</div>
+{{template "footer" .}}

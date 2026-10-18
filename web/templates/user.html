@@ -1,0 +1,45 @@
+{{template "head" .}}
+{{template "navbar" .}}
+{{template "flashes" .}}
+<main class="container py-4">
+  <div class="row">
+    <div class="col-md-4 mb-4">
+      <div class="card profile-card">
+        <div class="card-body">
+          <h3>{{.Profile.Name}}</h3>
+          {{if .Place}}<p class="mb-1"><span data-i18n="Place:">Place:</span> <strong>{{.Place}}</strong></p>{{end}}
+          <p class="mb-1"><span data-i18n="Score:">Score:</span> <strong>{{.Score}}</strong></p>
+          {{if .Profile.Affiliation}}<p class="mb-1" hidden>{{.Profile.Affiliation}}</p>{{end}}
+          {{if .Profile.Country}}<p class="mb-1" hidden data-country="{{.Profile.Country}}">{{countryName .Profile.Country}}</p>{{end}}
+          {{if .Profile.Website}}<p hidden><a href="{{.Profile.Website}}">{{.Profile.Website}}</a></p>{{end}}
+          {{if .Profile.Team}}<p><span data-i18n="Team:">Team:</span> <a href="/teams/{{.Profile.Team.ID}}">{{.Profile.Team.Name}}</a></p>{{end}}
+        </div>
+      </div>
+    </div>
+    <div class="col-md-8">
+      <h4 data-i18n="Solves">Solves</h4>
+      <table class="table">
+        <thead><tr><th data-i18n="Challenge">Challenge</th><th data-i18n="Category">Category</th><th data-i18n="Value">Value</th><th data-i18n="Time">Time</th></tr></thead>
+        <tbody>
+          {{range .Solves}}
+          <tr>
+            <td>{{.Challenge.Name}}</td>
+            <td>{{.Challenge.Category}}</td>
+            <td>{{.Challenge.Value}}</td>
+            <td>{{formatDate .Date}}</td>
+          </tr>
+          {{else}}<tr><td colspan="4" class="text-muted" data-i18n="No solves yet.">No solves yet.</td></tr>{{end}}
+        </tbody>
+      </table>
+      {{if .Awards}}
+      <h4 class="mt-4" data-i18n="Awards">Awards</h4>
+      <ul class="list-group">
+        {{range .Awards}}
+        <li class="list-group-item d-flex justify-content-between"><span>{{.Name}}</span><span>{{.Value}}</span></li>
+        {{end}}
+      </ul>
+      {{end}}
+    </div>
+  </div>
+</main>
+{{template "footer" .}}

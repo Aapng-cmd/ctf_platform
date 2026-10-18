@@ -1,0 +1,9 @@
+{{template "head" .}}
+{{template "navbar" .}}
+{{template "flashes" .}}
+<main class="container py-5">
+  <article class="page-content markdown-body">
+    {{md .Page.Content}}
+  </article>
+</main>
+{{template "footer" .}}

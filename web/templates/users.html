@@ -1,0 +1,22 @@
+{{template "head" .}}
+{{template "navbar" .}}
+{{template "flashes" .}}
+<main class="container py-4">
+  <h2 data-i18n="Users">Users</h2>
+  <div class="table-responsive">
+    <table class="table table-hover">
+      <thead><tr><th data-i18n="User">User</th><th hidden data-i18n="Website">Website</th><th hidden data-i18n="Affiliation">Affiliation</th><th hidden data-i18n="Country">Country</th></tr></thead>
+      <tbody>
+        {{range .Users}}
+        <tr>
+          <td><a href="/users/{{.ID}}">{{.Name}}</a></td>
+          <td hidden>{{if .Website}}<a href="{{.Website}}" rel="noopener">{{.Website}}</a>{{end}}</td>
+          <td hidden>{{.Affiliation}}</td>
+          <td hidden data-country="{{.Country}}">{{countryName .Country}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</main>
+{{template "footer" .}}

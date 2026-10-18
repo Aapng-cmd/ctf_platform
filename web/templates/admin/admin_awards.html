@@ -1,0 +1,43 @@
+{{template "head" .}}
+{{template "navbar" .}}
+<div class="admin-wrap">
+{{template "adminnav" .}}
+<main class="admin-main">
+  {{template "flashes" .}}
+  <h2 data-i18n="Awards">Awards</h2>
+  <form method="post" class="row g-2 mb-4">
+    <input type="hidden" name="nonce" value="{{.CSRF}}">
+    <div class="col-md-3">
+      <select class="form-select" name="user_id" required>
+        <option value="" data-i18n="User">User</option>
+        {{range .Users}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+      </select>
+    </div>
+    <div class="col-md-3"><input class="form-control" name="name" placeholder="Name" required data-i18n-placeholder="Name"></div>
+    <div class="col-md-2"><input class="form-control" type="text" inputmode="numeric" name="value" placeholder="Value" required data-i18n-placeholder="Value"></div>
+    <div class="col-md-2"><input class="form-control" name="category" placeholder="Category" data-i18n-placeholder="Category"></div>
+    <div class="col-md-2"><button class="btn btn-primary w-100" type="submit" data-i18n="Grant">Grant</button></div>
+    <div class="col-12"><input class="form-control" name="description" placeholder="Description" data-i18n-placeholder="Description"></div>
+  </form>
+  <table class="table">
+    <thead><tr><th data-i18n="User">User</th><th data-i18n="Name">Name</th><th data-i18n="Value">Value</th><th data-i18n="Date">Date</th><th></th></tr></thead>
+    <tbody>
+      {{range .Awards}}
+      <tr>
+        <td>{{.User.Name}}</td>
+        <td>{{.Name}}</td>
+        <td>{{.Value}}</td>
+        <td>{{formatDate .Date}}</td>
+        <td>
+          <form method="post" action="/admin/awards/{{.ID}}/delete">
+            <input type="hidden" name="nonce" value="{{$.CSRF}}">
+            <button class="btn btn-sm btn-link text-danger" type="submit" data-i18n="delete">delete</button>
+          </form>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</main>
+</div>
+{{template "footer" .}}

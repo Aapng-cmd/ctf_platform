@@ -1,48 +1,58 @@
-version: '3'
 services:
   web:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    privileged: true
+    build: .
     ports:
-      - "80:80"  # Map port 8080 on the host to port 80 in the container
-    volumes:
-      - ./src:/var/www/html  # Mount the src directory to the container
-      - ./php.ini:/etc/php/7.4/apache2/php.ini
-      - ./php.ini:/etc/php/7.4/cli/php.ini
-      - ./mydomain.conf:/etc/apache2/sites-available/mydomain.conf
-    links:
-      - mysql:mysql
-    dns:
-      - 127.0.0.1
-      - 8.8.8.8
-      - 8.8.4.4
-    networks:
-      - app-network
+      - "8000:8000"
     environment:
-      - MYSQL_HOST=mysql
-      - MYSQL_DATABASE=site
-      - MYSQL_USER=user_site
-      - MYSQL_PASSWORD=password
-      - DOMAIN_NAME=mydomain.local
+      PORT: "8000"
+      DB_DRIVER: mysql
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_DATABASE: ctfd
+      MYSQL_USER: ctfd
+      MYSQL_PASSWORD: ctfd
+      SECRET_KEY: ${SECRET_KEY:-change-this-to-a-long-random-string}
+      UPLOAD_DIR: /app/data/uploads
+      DATA_DIR: /app/data
+      TASKS_DIR: /app/data/tasks
+      PUBLIC_HOST: ${PUBLIC_HOST:-127.0.0.1}
+      GIN_MODE: release
+    depends_on:
+      mysql:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - uploads:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    stop_grace_period: 2m
+    restart: unless-stopped
 
   mysql:
-    image: mysql:8.0
-    networks:
-      - app-network
+    image: mariadb:11
     environment:
-      MYSQL_HOST: localhost
-      MYSQL_ROOT_PASSWORD: rootpass
-      MYSQL_DATABASE: site
-      MYSQL_USER: user_site
-      MYSQL_PASSWORD: password
+      MARIADB_DATABASE: ctfd
+      MARIADB_USER: ctfd
+      MARIADB_PASSWORD: ctfd
+      MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: ctfd
+      MYSQL_USER: ctfd
+      MYSQL_PASSWORD: ctfd
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-name-resolve
     volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-      - mysql_data:/var/lib/mysql
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+    restart: unless-stopped
 
 volumes:
-  mysql_data:
-networks:
-  app-network:
-    driver: bridge
+  mariadb_data:
+  uploads:

@@ -1,0 +1,66 @@
+{{template "head" .}}
+{{template "navbar" .}}
+{{template "flashes" .}}
+<main class="container py-4">
+  <h2 data-i18n="score.title">Scoreboard</h2>
+  {{if .Frozen}}<div class="alert alert-info" data-i18n="score.frozen">The scoreboard is frozen.</div>{{end}}
+
+  {{if .IsAD}}
+  <div class="page-head mt-4">
+    <h4 data-i18n="score.ad">Attack-Defense</h4>
+    <a class="btn btn-sm btn-outline-light" href="/dashboard" data-i18n="nav.dashboard">Dashboard</a>
+  </div>
+  <div class="table-responsive mb-4">
+    <table class="table table-striped align-middle">
+      <thead>
+        <tr><th data-i18n="score.place">Place</th><th data-i18n="score.team">Team</th><th data-i18n="score.attack">Attack</th><th data-i18n="score.defense">Defense</th><th data-i18n="score.sla">SLA</th><th data-i18n="score.lost">Lost</th><th data-i18n="score.down">Downtime</th><th data-i18n="score.total">Total</th></tr>
+      </thead>
+      <tbody>
+        {{range .ADStandings}}
+        <tr>
+          <td>{{.Place}}</td>
+          <td><a href="/teams/{{.AccountID}}">{{.Name}}</a></td>
+          <td>{{.Attack}}</td>
+          <td>{{.Defense}}</td>
+          <td>{{.SLA}}</td>
+          <td>{{if .Lost}}−{{.Lost}}{{else}}0{{end}}</td>
+          <td>{{if .Down}}−{{.Down}}{{else}}0{{end}}</td>
+          <td><strong>{{.Score}}</strong></td>
+        </tr>
+        {{else}}
+        <tr><td colspan="8" class="text-muted" data-i18n="score.empty">No scores yet.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+
+  {{if .IsJeopardy}}
+  {{if .IsAD}}<h4 data-i18n="score.jeopardy">Jeopardy</h4>{{end}}
+  <div class="chart-box"><canvas id="scoregraph"></canvas></div>
+  <div class="table-responsive">
+    <table class="table table-striped align-middle">
+      <thead>
+        <tr><th data-i18n="score.place">Place</th><th>{{if .IsTeams}}<span data-i18n="score.team">Team</span>{{else}}<span data-i18n="score.user">User</span>{{end}}</th><th data-i18n="score.score">Score</th><th data-i18n="admin.solves">Solves</th></tr>
+      </thead>
+      <tbody>
+        {{range .Standings}}
+        <tr>
+          <td>{{.Place}}</td>
+          <td>
+            {{if $.IsTeams}}<a href="/teams/{{.AccountID}}">{{.Name}}</a>
+            {{else}}<a href="/users/{{.AccountID}}">{{.Name}}</a>{{end}}
+            {{if .Affiliation}}<div class="small text-muted" hidden>{{.Affiliation}}</div>{{end}}
+          </td>
+          <td>{{.Score}}</td>
+          <td>{{.Solves}}</td>
+        </tr>
+        {{else}}
+        <tr><td colspan="4" class="text-muted" data-i18n="score.empty">No scores yet.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+</main>
+{{template "footer" .}}

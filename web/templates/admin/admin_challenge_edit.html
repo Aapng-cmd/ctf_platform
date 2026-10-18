@@ -1,0 +1,149 @@
+{{template "head" .}}
+{{template "navbar" .}}
+<div class="admin-wrap">
+{{template "adminnav" .}}
+<main class="admin-main" data-deploy-poll>
+  {{template "flashes" .}}
+  <h2 class="tr-msg">{{.Title}}</h2>
+  <form method="post" enctype="multipart/form-data" {{if .Challenge.ID}}action="/admin/challenges/{{.Challenge.ID}}"{{else}}action="/admin/challenges"{{end}}>
+    <input type="hidden" name="nonce" value="{{.CSRF}}">
+    <div class="row">
+      <div class="col-md-8">
+        <div class="mb-3"><label class="form-label" data-i18n="Name">Name</label><input class="form-control" name="name" value="{{.Challenge.Name}}" required></div>
+        <div class="mb-3"><label class="form-label" data-i18n="Category">Category</label><input class="form-control" name="category" value="{{.Challenge.Category}}" required placeholder="Web"></div>
+        <div class="mb-3"><label class="form-label" data-i18n="Description (Markdown)">Description (Markdown)</label><textarea class="form-control" name="description" rows="8">{{.Challenge.Description}}</textarea></div>
+        <div class="mb-3"><label class="form-label" data-i18n="Attribution">Attribution</label><input class="form-control" name="attribution" value="{{.Challenge.Attribution}}"></div>
+        <div class="mb-3"><label class="form-label" data-i18n="Connection Info">Connection Info</label><textarea class="form-control" name="connection_info" rows="2">{{.Challenge.ConnectionInfo}}</textarea></div>
+      </div>
+      <div class="col-md-4">
+        <div class="mb-3"><label class="form-label" data-i18n="Value">Value</label><input class="form-control" type="text" inputmode="numeric" name="value" value="{{.Challenge.Value}}"></div>
+        <div class="mb-3">
+          <label class="form-label" data-i18n="Type">Type</label>
+          <select class="form-select" name="type" id="chalType">
+            <option value="standard" {{if eq .Challenge.Type "standard"}}selected{{end}} data-i18n="standard">standard</option>
+            <option value="dynamic" {{if eq .Challenge.Type "dynamic"}}selected{{end}} data-i18n="dynamic">dynamic</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" data-i18n="State">State</label>
+          <select class="form-select" name="state">
+            <option value="visible" {{if eq .Challenge.State "visible"}}selected{{end}} data-i18n="visible">visible</option>
+            <option value="hidden" {{if eq .Challenge.State "hidden"}}selected{{end}} data-i18n="hidden">hidden</option>
+          </select>
+        </div>
+        <div class="mb-3"><label class="form-label" data-i18n="Max Attempts (0 = unlimited)">Max Attempts (0 = unlimited)</label><input class="form-control" type="text" inputmode="numeric" name="max_attempts" value="{{.Challenge.MaxAttempts}}"></div>
+        <div class="dynamic-only">
+          <div class="mb-3"><label class="form-label" data-i18n="Initial">Initial</label><input class="form-control" type="text" inputmode="numeric" name="initial" value="{{.Challenge.Initial}}"></div>
+          <div class="mb-3"><label class="form-label" data-i18n="Minimum">Minimum</label><input class="form-control" type="text" inputmode="numeric" name="minimum" value="{{.Challenge.Minimum}}"></div>
+          <div class="mb-3"><label class="form-label" data-i18n="Decay">Decay</label><input class="form-control" type="text" inputmode="numeric" name="decay" value="{{.Challenge.Decay}}"></div>
+          <div class="mb-3">
+            <label class="form-label" data-i18n="Function">Function</label>
+            <select class="form-select" name="function">
+              <option value="linear" {{if eq .Challenge.Function "linear"}}selected{{end}} data-i18n="linear">linear</option>
+              <option value="logarithmic" {{if eq .Challenge.Function "logarithmic"}}selected{{end}} data-i18n="logarithmic">logarithmic</option>
+            </select>
+          </div>
+        </div>
+        <div class="mb-3"><label class="form-label" data-i18n="Requirements (challenge IDs, comma-separated)">Requirements (challenge IDs, comma-separated)</label><input class="form-control" name="requirements" value="{{.Challenge.Requirements}}"></div>
+        <div class="mb-3">
+          <label class="form-label" data-i18n="Tags (comma-separated)">Tags (comma-separated)</label>
+          <input class="form-control" name="tags" value="{{range $i, $t := .Challenge.Tags}}{{if $i}}, {{end}}{{$t.Value}}{{end}}">
+        </div>
+      </div>
+    </div>
+
+    <h5 data-i18n="Flags">Flags</h5>
+    <div id="flags">
+      {{range .Challenge.Flags}}
+      <div class="row g-2 mb-2 flag-row">
+        <div class="col-md-6"><input class="form-control" name="flag_content" value="{{.Content}}" placeholder="flag{...}"></div>
+        <div class="col-md-3">
+          <select class="form-select" name="flag_type">
+            <option value="static" {{if eq .Type "static"}}selected{{end}} data-i18n="static">static</option>
+            <option value="regex" {{if eq .Type "regex"}}selected{{end}} data-i18n="regex">regex</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <select class="form-select" name="flag_data">
+            <option value="" data-i18n="case sensitive">case sensitive</option>
+            <option value="case_insensitive" {{if eq .Data "case_insensitive"}}selected{{end}} data-i18n="case insensitive">case insensitive</option>
+          </select>
+        </div>
+      </div>
+      {{else}}
+      <div class="row g-2 mb-2 flag-row">
+        <div class="col-md-6"><input class="form-control" name="flag_content" placeholder="flag{...}"></div>
+        <div class="col-md-3"><select class="form-select" name="flag_type"><option value="static" data-i18n="static">static</option><option value="regex" data-i18n="regex">regex</option></select></div>
+        <div class="col-md-3"><select class="form-select" name="flag_data"><option value="" data-i18n="case sensitive">case sensitive</option><option value="case_insensitive" data-i18n="case insensitive">case insensitive</option></select></div>
+      </div>
+      {{end}}
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-light mb-4" onclick="addFlag()" data-i18n="Add flag">Add flag</button>
+
+    <h5 data-i18n="Hints">Hints</h5>
+    <div id="hints">
+      {{range .Challenge.Hints}}
+      <div class="row g-2 mb-2">
+        <div class="col-md-3"><input class="form-control" name="hint_title" value="{{.Title}}" placeholder="Title" data-i18n-placeholder="Title"></div>
+        <div class="col-md-7"><input class="form-control" name="hint_content" value="{{.Content}}" placeholder="Content" data-i18n-placeholder="Content"></div>
+        <div class="col-md-2"><input class="form-control" type="text" inputmode="numeric" name="hint_cost" value="{{.Cost}}" placeholder="Cost" data-i18n-placeholder="Cost"></div>
+      </div>
+      {{else}}
+      <div class="row g-2 mb-2">
+        <div class="col-md-3"><input class="form-control" name="hint_title" placeholder="Title" data-i18n-placeholder="Title"></div>
+        <div class="col-md-7"><input class="form-control" name="hint_content" placeholder="Content" data-i18n-placeholder="Content"></div>
+        <div class="col-md-2"><input class="form-control" type="text" inputmode="numeric" name="hint_cost" placeholder="Cost" data-i18n-placeholder="Cost"></div>
+      </div>
+      {{end}}
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-light mb-4" onclick="addHint()" data-i18n="Add hint">Add hint</button>
+
+    <h5 data-i18n="Files">Files</h5>
+    {{if .Challenge.Files}}
+    <ul>
+      {{range .Challenge.Files}}
+      <li>{{.Name}} <button class="btn btn-sm btn-link text-danger" form="del-{{.ID}}" type="submit" data-i18n="delete">delete</button></li>
+      {{end}}
+    </ul>
+    {{end}}
+    <div class="mb-3"><input class="form-control" type="file" name="files" multiple></div>
+    <button class="btn btn-primary" type="submit" data-i18n="Save">Save</button>
+  </form>
+  {{range .Challenge.Files}}
+  <form id="del-{{.ID}}" method="post" action="/admin/files/{{.ID}}/delete"><input type="hidden" name="nonce" value="{{$.CSRF}}"></form>
+  {{end}}
+  {{if and .Challenge.ID .Challenge.ComposeDir}}
+  <div class="panel p-3 mt-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+      <h5 class="mb-0"><span data-i18n="admin.deploy">Deploy</span>: <span class="deploy-status badge-status {{if .Challenge.DeployStatus}}badge-{{.Challenge.DeployStatus}}{{end}}" data-deploy-kind="challenge" data-deploy-id="{{.Challenge.ID}}" {{if .Challenge.DeployStatus}}data-i18n="deploy.{{.Challenge.DeployStatus}}"{{end}}>{{if .Challenge.DeployStatus}}{{.Challenge.DeployStatus}}{{else}}—{{end}}</span></h5>
+      <div class="d-flex gap-2">
+        <form method="post" action="/admin/challenges/{{.Challenge.ID}}/redeploy"><input type="hidden" name="nonce" value="{{.CSRF}}"><button class="btn btn-sm btn-primary" type="submit" data-i18n="admin.redeploy">Redeploy</button></form>
+        <form method="post" action="/admin/challenges/{{.Challenge.ID}}/stop"><input type="hidden" name="nonce" value="{{.CSRF}}"><button class="btn btn-sm btn-outline-warning" type="submit" data-i18n="admin.stop">Stop</button></form>
+      </div>
+    </div>
+    <p class="text-muted small mb-2">{{.Challenge.ComposeDir}}</p>
+    <details class="deploy-details" {{if .Challenge.DeployLog}}open{{end}}>
+      <summary data-i18n="admin.log">Build log</summary>
+      <pre class="deploy-log" data-deploy-log="challenge" data-deploy-id="{{.Challenge.ID}}">{{.Challenge.DeployLog}}</pre>
+    </details>
+  </div>
+  {{end}}
+  {{if .Challenge.ID}}
+  <form class="mt-4" method="post" action="/admin/challenges/{{.Challenge.ID}}/delete" data-confirm="confirm.deleteChallenge">
+    <input type="hidden" name="nonce" value="{{.CSRF}}">
+    <button class="btn btn-danger" type="submit" data-i18n="Delete Challenge">Delete Challenge</button>
+  </form>
+  {{end}}
+</main>
+</div>
+<script>
+function addFlag(){
+  document.getElementById('flags').insertAdjacentHTML('beforeend',
+    '<div class="row g-2 mb-2"><div class="col-md-6"><input class="form-control" name="flag_content" placeholder="flag{...}"></div><div class="col-md-3"><select class="form-select" name="flag_type"><option value="static">static</option><option value="regex">regex</option></select></div><div class="col-md-3"><select class="form-select" name="flag_data"><option value="">case sensitive</option><option value="case_insensitive">case insensitive</option></select></div></div>');
+}
+function addHint(){
+  document.getElementById('hints').insertAdjacentHTML('beforeend',
+    '<div class="row g-2 mb-2"><div class="col-md-3"><input class="form-control" name="hint_title" placeholder="Title"></div><div class="col-md-7"><input class="form-control" name="hint_content" placeholder="Content"></div><div class="col-md-2"><input class="form-control" type="text" inputmode="numeric" name="hint_cost" placeholder="Cost"></div></div>');
+}
+</script>
+{{template "footer" .}}

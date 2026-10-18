@@ -1,0 +1,55 @@
+{{template "head" .}}
+{{template "navbar" .}}
+{{template "flashes" .}}
+<main class="container py-4">
+  <div class="page-head">
+    <h2 data-i18n="challenges.title">Challenges</h2>
+    <input id="chal-search" class="form-control page-search" data-i18n-placeholder="challenges.search" placeholder="Search">
+  </div>
+  {{range .Categories}}
+  <section class="mb-4 chal-cat" data-cat="{{.}}">
+    <h4 class="category-title">{{.}}</h4>
+    <div class="row g-3">
+      {{range index $.ByCategory .}}
+      <div class="col-sm-6 col-md-4 col-lg-3 chal-card" data-name="{{.Name}}">
+        <button class="challenge-button {{if has $.Solved .ID}}solved{{end}}" data-id="{{.ID}}">
+          <div class="chal-name">{{.Name}}</div>
+          <span class="chal-points">{{.Value}}</span>
+        </button>
+      </div>
+      {{end}}
+    </div>
+  </section>
+  {{else}}
+  <p class="text-muted" data-i18n="challenges.empty">No challenges are visible yet.</p>
+  {{end}}
+</main>
+
+<div class="modal fade" id="chalModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content chal-modal">
+      <div class="modal-header">
+        <h5 class="modal-title" id="chalName"></h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex gap-3 flex-wrap text-muted small mb-3">
+          <span id="chalValue"></span>
+          <span id="chalSolves"></span>
+          <span id="chalFB"></span>
+          <span id="chalAttempts"></span>
+        </div>
+        <div id="chalDesc" class="markdown-body mb-3"></div>
+        <pre id="chalConn" class="chal-conn d-none"></pre>
+        <div id="chalFiles" class="mb-3"></div>
+        <div id="chalHints" class="mb-3"></div>
+        <form id="flagForm" class="input-group">
+          <input class="form-control" id="flagInput" placeholder="Flag" autocomplete="off" data-i18n-placeholder="Flag">
+          <button class="btn btn-primary" type="submit" data-i18n="challenges.submit">Submit</button>
+        </form>
+        <div id="flagMsg" class="mt-2"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{{template "footer" .}}

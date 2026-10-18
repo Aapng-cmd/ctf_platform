@@ -1,0 +1,38 @@
+{{template "head" .}}
+{{template "navbar" .}}
+{{template "flashes" .}}
+<main class="container py-4">
+  <div class="row">
+    <div class="col-md-4 mb-4">
+      <div class="card profile-card">
+        <div class="card-body">
+          <h3>{{.Team.Name}}</h3>
+          {{if .Place}}<p class="mb-1"><span data-i18n="Place:">Place:</span> <strong>{{.Place}}</strong></p>{{end}}
+          <p class="mb-1"><span data-i18n="Score:">Score:</span> <strong>{{.Score}}</strong></p>
+          {{if .Team.Affiliation}}<p hidden>{{.Team.Affiliation}}</p>{{end}}
+          <h6 class="mt-3" data-i18n="Members">Members</h6>
+          <ul class="list-unstyled">
+            {{range .Team.Members}}<li><a href="/users/{{.ID}}">{{.Name}}</a></li>{{end}}
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-8">
+      <h4 data-i18n="Solves">Solves</h4>
+      <table class="table">
+        <thead><tr><th data-i18n="Challenge">Challenge</th><th data-i18n="User">User</th><th data-i18n="Value">Value</th><th data-i18n="Time">Time</th></tr></thead>
+        <tbody>
+          {{range .Solves}}
+          <tr>
+            <td>{{.Challenge.Name}}</td>
+            <td>{{.User.Name}}</td>
+            <td>{{.Challenge.Value}}</td>
+            <td>{{formatDate .Date}}</td>
+          </tr>
+          {{else}}<tr><td colspan="4" class="text-muted" data-i18n="No solves yet.">No solves yet.</td></tr>{{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+{{template "footer" .}}

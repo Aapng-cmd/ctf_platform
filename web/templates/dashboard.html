@@ -1,0 +1,23 @@
+{{template "head" .}}
+{{template "navbar" .}}
+{{template "flashes" .}}
+<main class="container-fluid ad-dash py-4" id="ad-dashboard">
+  <div class="ad-dash-head">
+    <div>
+      <h2 class="mb-2" data-i18n="dash.title">Attack-Defense</h2>
+      <div class="ad-legend">
+        <span><i class="ad-swatch up"></i><span data-i18n="dash.up">Up</span></span>
+        <span><i class="ad-swatch down"></i><span data-i18n="dash.down">Down</span></span>
+      </div>
+    </div>
+    <div class="ad-round">
+      <div class="ad-round-label" data-i18n="attack.round">Round</div>
+      <div class="ad-round-num" id="adRoundNum">—</div>
+      <div class="ad-round-left" id="adRoundLeft"></div>
+      <div class="ad-round-bar"><span id="adRoundBar"></span></div>
+    </div>
+  </div>
+  <div class="ad-board" id="adBoard"></div>
+</main>
+<script type="application/json" id="ad-dashboard-data">{{.Board}}</script>
+{{template "footer" .}}

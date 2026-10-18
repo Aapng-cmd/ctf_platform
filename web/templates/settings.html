@@ -1,0 +1,41 @@
+{{template "head" .}}
+{{template "navbar" .}}
+{{template "flashes" .}}
+<main class="auth-shell">
+  <div class="auth-card">
+  <h2 data-i18n="settings.title">Settings</h2>
+  <form method="post">
+    <input type="hidden" name="nonce" value="{{.CSRF}}">
+    <div class="mb-3">
+      <label class="form-label" data-i18n="settings.email">Email</label>
+      <input class="form-control" type="email" name="email" value="{{.User.Email}}">
+    </div>
+    <div class="mb-3" hidden>
+      <label class="form-label" data-i18n="Website">Website</label>
+      <input class="form-control" name="website" value="{{.User.Website}}">
+    </div>
+    <div class="mb-3" hidden>
+      <label class="form-label" data-i18n="Affiliation">Affiliation</label>
+      <input class="form-control" name="affiliation" value="{{.User.Affiliation}}">
+    </div>
+    <div class="mb-3" hidden>
+      <label class="form-label" data-i18n="Country">Country</label>
+      <select class="form-select" name="country">
+        <option value=""></option>
+        {{range .Countries}}<option value="{{.Code}}" {{if eq $.User.Country .Code}}selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+    </div>
+    <hr>
+    <div class="mb-3">
+      <label class="form-label" data-i18n="settings.password">New Password</label>
+      <input class="form-control" type="password" name="password">
+    </div>
+    <div class="mb-3">
+      <label class="form-label" data-i18n="settings.confirm">Confirm Current Password</label>
+      <input class="form-control" type="password" name="confirm">
+    </div>
+    <button class="btn btn-primary w-100" type="submit" data-i18n="settings.update">Update</button>
+  </form>
+  </div>
+</main>
+{{template "footer" .}}

@@ -1,0 +1,30 @@
+{{template "head" .}}
+{{template "navbar" .}}
+<div class="admin-wrap">
+{{template "adminnav" .}}
+<main class="admin-main">
+  {{template "flashes" .}}
+  <h2 data-i18n="Notifications">Notifications</h2>
+  <form method="post" class="mb-4">
+    <input type="hidden" name="nonce" value="{{.CSRF}}">
+    <div class="mb-3"><input class="form-control" name="title" placeholder="Title" required data-i18n-placeholder="Title"></div>
+    <div class="mb-3"><textarea class="form-control" name="content" rows="4" placeholder="Markdown content" data-i18n-placeholder="Markdown content"></textarea></div>
+    <button class="btn btn-primary" type="submit" data-i18n="Post">Post</button>
+  </form>
+  {{range .Notifications}}
+  <div class="card mb-2">
+    <div class="card-body d-flex justify-content-between">
+      <div>
+        <strong>{{.Title}}</strong>
+        <div class="small text-muted">{{formatDate .Date}}</div>
+      </div>
+      <form method="post" action="/admin/notifications/{{.ID}}/delete">
+        <input type="hidden" name="nonce" value="{{$.CSRF}}">
+        <button class="btn btn-sm btn-outline-danger" type="submit" data-i18n="Delete">Delete</button>
+      </form>
+    </div>
+  </div>
+  {{end}}
+</main>
+</div>
+{{template "footer" .}}

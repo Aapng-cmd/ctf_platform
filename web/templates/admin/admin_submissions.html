@@ -1,0 +1,35 @@
+{{template "head" .}}
+{{template "navbar" .}}
+<div class="admin-wrap">
+{{template "adminnav" .}}
+<main class="admin-main">
+  {{template "flashes" .}}
+  <h2 data-i18n="Submissions">Submissions</h2>
+  <div class="mb-3">
+    <a class="btn btn-sm {{if eq .Kind "incorrect"}}btn-primary{{else}}btn-outline-light{{end}}" href="/admin/submissions?type=incorrect" data-i18n="Incorrect">Incorrect</a>
+    <a class="btn btn-sm {{if eq .Kind "correct"}}btn-primary{{else}}btn-outline-light{{end}}" href="/admin/submissions?type=correct" data-i18n="Correct">Correct</a>
+    <a class="btn btn-sm {{if eq .Kind "all"}}btn-primary{{else}}btn-outline-light{{end}}" href="/admin/submissions?type=all" data-i18n="All">All</a>
+  </div>
+  <table class="table table-sm table-hover">
+    <thead><tr><th data-i18n="Time">Time</th><th data-i18n="User">User</th><th data-i18n="Challenge">Challenge</th><th data-i18n="Provided">Provided</th><th data-i18n="Type">Type</th><th></th></tr></thead>
+    <tbody>
+      {{range .Submissions}}
+      <tr>
+        <td>{{formatDate .Date}}</td>
+        <td>{{.User.Name}}</td>
+        <td>{{.Challenge.Name}}</td>
+        <td class="text-break">{{.Provided}}</td>
+        <td class="tr-msg">{{.Type}}</td>
+        <td>
+          <form method="post" action="/admin/submissions/{{.ID}}/delete">
+            <input type="hidden" name="nonce" value="{{$.CSRF}}">
+            <button class="btn btn-sm btn-link text-danger" type="submit" data-i18n="delete">delete</button>
+          </form>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</main>
+</div>
+{{template "footer" .}}

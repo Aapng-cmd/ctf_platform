@@ -1,0 +1,27 @@
+{{template "head" .}}
+{{template "navbar" .}}
+<div class="admin-wrap">
+{{template "adminnav" .}}
+<main class="admin-main">
+  {{template "flashes" .}}
+  <h2 data-i18n="Edit Team">Edit Team</h2>
+  <form method="post">
+    <input type="hidden" name="nonce" value="{{.CSRF}}">
+    <div class="mb-3"><label class="form-label" data-i18n="Name">Name</label><input class="form-control" name="name" value="{{.Team.Name}}"></div>
+    <div class="mb-3"><label class="form-label" data-i18n="Email">Email</label><input class="form-control" name="email" value="{{.Team.Email}}"></div>
+    <div class="mb-3" hidden><label class="form-label" data-i18n="Website">Website</label><input class="form-control" name="website" value="{{.Team.Website}}"></div>
+    <div class="mb-3" hidden><label class="form-label" data-i18n="Affiliation">Affiliation</label><input class="form-control" name="affiliation" value="{{.Team.Affiliation}}"></div>
+    <div class="mb-3"><label class="form-label" data-i18n="New Password">New Password</label><input class="form-control" type="password" name="password"></div>
+    <div class="form-check"><input class="form-check-input" type="checkbox" name="hidden" {{if .Team.Hidden}}checked{{end}}><label class="form-check-label" data-i18n="Hidden">Hidden</label></div>
+    <div class="form-check mb-3"><input class="form-check-input" type="checkbox" name="banned" {{if .Team.Banned}}checked{{end}}><label class="form-check-label" data-i18n="Banned">Banned</label></div>
+    <button class="btn btn-primary" type="submit" data-i18n="Save">Save</button>
+  </form>
+  <h5 class="mt-4" data-i18n="Members">Members</h5>
+  <ul>{{range .Team.Members}}<li><a href="/admin/users/{{.ID}}">{{.Name}}</a></li>{{end}}</ul>
+  <form class="mt-3" method="post" action="/admin/teams/{{.Team.ID}}/delete" data-confirm="confirm.deleteTeam">
+    <input type="hidden" name="nonce" value="{{.CSRF}}">
+    <button class="btn btn-danger" type="submit" data-i18n="Delete Team">Delete Team</button>
+  </form>
+</main>
+</div>
+{{template "footer" .}}

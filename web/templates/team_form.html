@@ -1,0 +1,38 @@
+{{template "head" .}}
+{{template "navbar" .}}
+{{template "flashes" .}}
+<main class="auth-shell">
+  <div class="auth-card">
+  <h2 {{if eq .Mode "create"}}data-i18n="nav.createTeam"{{else}}data-i18n="nav.joinTeam"{{end}}>{{.Title}}</h2>
+  <form method="post">
+    <input type="hidden" name="nonce" value="{{.CSRF}}">
+    <div class="mb-3">
+      <label class="form-label" data-i18n="team.name">Team Name</label>
+      <input class="form-control" name="name" required>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" data-i18n="team.password">Team Password</label>
+      <input class="form-control" type="password" name="password" required>
+    </div>
+    {{if eq .Mode "create"}}
+    <div class="mb-3" hidden>
+      <label class="form-label" data-i18n="Website">Website</label>
+      <input class="form-control" name="website">
+    </div>
+    <div class="mb-3" hidden>
+      <label class="form-label" data-i18n="Affiliation">Affiliation</label>
+      <input class="form-control" name="affiliation">
+    </div>
+    <div class="mb-3" hidden>
+      <label class="form-label" data-i18n="Country">Country</label>
+      <select class="form-select" name="country">
+        <option value=""></option>
+        {{range .Countries}}<option value="{{.Code}}">{{.Name}}</option>{{end}}
+      </select>
+    </div>
+    {{end}}
+    <button class="btn btn-primary w-100" type="submit" data-i18n="register.submit">Submit</button>
+  </form>
+  </div>
+</main>
+{{template "footer" .}}

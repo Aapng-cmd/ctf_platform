@@ -1,0 +1,33 @@
+{{template "head" .}}
+{{template "navbar" .}}
+<div class="admin-wrap">
+{{template "adminnav" .}}
+<main class="admin-main">
+  {{template "flashes" .}}
+  <h2 data-i18n="Statistics">Statistics</h2>
+  <div class="row g-3 mb-4">
+    <div class="col-md-3"><div class="stat-card"><div class="stat-num">{{.Users}}</div><div data-i18n="Users">Users</div></div></div>
+    <div class="col-md-3"><div class="stat-card"><div class="stat-num">{{.Teams}}</div><div data-i18n="Teams">Teams</div></div></div>
+    <div class="col-md-3"><div class="stat-card"><div class="stat-num">{{.Challenges}}</div><div data-i18n="Challenges">Challenges</div></div></div>
+    <div class="col-md-3"><div class="stat-card"><div class="stat-num">{{.Solves}}</div><div data-i18n="Solves">Solves</div></div></div>
+  </div>
+  <div class="row">
+    <div class="col-md-6">
+      <h5 data-i18n="Challenges by category">Challenges by category</h5>
+      <table class="table table-sm"><tbody>
+        {{range .ByCategory}}<tr><td>{{.Category}}</td><td>{{.Count}}</td></tr>{{end}}
+      </tbody></table>
+    </div>
+    <div class="col-md-6">
+      <h5 data-i18n="Top 10">Top 10</h5>
+      <table class="table table-sm">
+        <thead><tr><th>#</th><th data-i18n="Name">Name</th><th data-i18n="Score">Score</th></tr></thead>
+        <tbody>
+          {{range .Top}}<tr><td>{{.Place}}</td><td>{{.Name}}</td><td>{{.Score}}</td></tr>{{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+</div>
+{{template "footer" .}}

@@ -1,4 +1,7 @@
-src/tasks/
-src/profiles/
-src/uploads/
-src/config.php
+/ctfd
+/bin/
+/data/
+*.db
+.env
+web/static/uploads/
+dist/

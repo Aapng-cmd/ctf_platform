@@ -1,0 +1,135 @@
+{{define "head"}}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{if .Title}}{{.Title}} | {{end}}{{.CTFName}}</title>
+  <style>html.i18n-wait body{visibility:hidden}</style>
+  <script>
+  (function () {
+    var lang = "ru";
+    try { lang = localStorage.getItem("ctf_lang") === "en" ? "en" : "ru"; } catch (e) {}
+    document.documentElement.lang = lang;
+    if (lang !== "ru") return;
+    document.documentElement.classList.add("i18n-wait");
+    setTimeout(function () { document.documentElement.classList.remove("i18n-wait"); }, 2500);
+  })();
+  </script>
+  <link rel="preload" href="/static/vendor/fonts/ibm-plex-sans-cyrillic-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/static/vendor/fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/vendor/fonts/plex.css">
+  <link rel="stylesheet" href="/static/vendor/bootstrap/bootstrap.min.css">
+  <link rel="stylesheet" href="/static/vendor/bootstrap-icons/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/static/css/core.css?v=13">
+</head>
+<body class="{{if .Admin}}admin-body{{end}}">
+{{end}}
+
+{{define "navbar"}}
+<nav class="navbar navbar-expand-lg navbar-dark ctfd-navbar">
+  <div class="container">
+    <a class="navbar-brand fw-bold" href="/">{{.CTFName}}</a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav" aria-label="Menu" data-i18n-aria="Menu"><span class="navbar-toggler-icon"></span></button>
+    <div class="collapse navbar-collapse" id="nav">
+      <ul class="navbar-nav me-auto">
+        {{if .IsTeams}}<li class="nav-item"><a class="nav-link {{if eq .RequestPath "/teams"}}active{{end}}" href="/teams" data-i18n="nav.teams">Teams</a></li>
+        {{else}}<li class="nav-item"><a class="nav-link {{if eq .RequestPath "/users"}}active{{end}}" href="/users" data-i18n="nav.users">Users</a></li>{{end}}
+        <li class="nav-item"><a class="nav-link {{if eq .RequestPath "/scoreboard"}}active{{end}}" href="/scoreboard" data-i18n="nav.scoreboard">Scoreboard</a></li>
+        {{if .IsJeopardy}}<li class="nav-item"><a class="nav-link {{if eq .RequestPath "/challenges"}}active{{end}}" href="/challenges" data-i18n="nav.challenges">Challenges</a></li>{{end}}
+        {{if .IsAD}}<li class="nav-item"><a class="nav-link {{if eq .RequestPath "/dashboard"}}active{{end}}" href="/dashboard" data-i18n="nav.dashboard">Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link {{if eq .RequestPath "/attack"}}active{{end}}" href="/attack" data-i18n="nav.attack">Attack</a></li>{{end}}
+        {{range .NavPages}}
+        <li class="nav-item"><a class="nav-link" href="/{{.Route}}">{{.Title}}</a></li>
+        {{end}}
+      </ul>
+      <ul class="navbar-nav ms-auto">
+        <li class="nav-item d-flex align-items-center">
+          <div class="lang-switch" role="group" aria-label="Language" data-i18n-aria="Language">
+            <button type="button" data-lang="en">EN</button>
+            <button type="button" data-lang="ru">RU</button>
+          </div>
+        </li>
+        {{if .User}}
+        <li class="nav-item"><a class="nav-link" href="/notifications" data-i18n-title="nav.notifications" title="Notifications"><i class="bi bi-bell"></i></a></li>
+        {{if .User.IsAdmin}}<li class="nav-item"><a class="nav-link" href="/admin" data-i18n="nav.admin">Admin</a></li>{{end}}
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">{{.User.Name}}</a>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="/users/{{.User.ID}}" data-i18n="nav.profile">Profile</a></li>
+            <li><a class="dropdown-item" href="/settings" data-i18n="nav.settings">Settings</a></li>
+            {{if .IsTeams}}
+            <li><hr class="dropdown-divider"></li>
+            {{if .User.TeamID}}<li><a class="dropdown-item" href="/teams/{{.User.TeamID}}" data-i18n="nav.team">Team</a></li>
+            {{else}}<li><a class="dropdown-item" href="/teams/new" data-i18n="nav.createTeam">Create Team</a></li>
+            <li><a class="dropdown-item" href="/teams/join" data-i18n="nav.joinTeam">Join Team</a></li>{{end}}
+            {{end}}
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="/logout" data-i18n="nav.logout">Logout</a></li>
+          </ul>
+        </li>
+        {{else}}
+        <li class="nav-item"><a class="nav-link" href="/login" data-i18n="nav.login">Login</a></li>
+        <li class="nav-item"><a class="nav-link" href="/register" data-i18n="nav.register">Register</a></li>
+        {{end}}
+      </ul>
+    </div>
+  </div>
+</nav>
+{{end}}
+
+{{define "flashes"}}
+{{if .Flashes}}
+<div class="container mt-3">
+  {{range .Flashes}}
+  <div class="alert alert-{{.Type}} alert-dismissible fade show" role="alert">
+    <span class="flash-text">{{.Message}}</span>
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {{end}}
+</div>
+{{end}}
+{{end}}
+
+{{define "adminnav"}}
+<aside class="admin-sidebar">
+  <div class="admin-brand"><a href="/admin" data-i18n="admin.panel">Admin Panel</a></div>
+  <a href="/admin/statistics" class="{{if eq .RequestPath "/admin/statistics"}}active{{end}}"><i class="bi bi-graph-up"></i> <span data-i18n="admin.statistics">Statistics</span></a>
+  <a href="/admin/notifications" class="{{if eq .RequestPath "/admin/notifications"}}active{{end}}"><i class="bi bi-bell"></i> <span data-i18n="admin.notifications">Notifications</span></a>
+  <a href="/admin/challenges" class="{{if eq .RequestPath "/admin/challenges"}}active{{end}}"><i class="bi bi-flag"></i> <span data-i18n="admin.challenges">Challenges</span></a>
+  <a href="/admin/users" class="{{if eq .RequestPath "/admin/users"}}active{{end}}"><i class="bi bi-people"></i> <span data-i18n="admin.users">Users</span></a>
+  {{if .IsTeams}}<a href="/admin/teams" class="{{if eq .RequestPath "/admin/teams"}}active{{end}}"><i class="bi bi-diagram-3"></i> <span data-i18n="admin.teams">Teams</span></a>{{end}}
+  <a href="/admin/submissions" class="{{if eq .RequestPath "/admin/submissions"}}active{{end}}"><i class="bi bi-inbox"></i> <span data-i18n="admin.submissions">Submissions</span></a>
+  <a href="/admin/scoreboard" class="{{if eq .RequestPath "/admin/scoreboard"}}active{{end}}"><i class="bi bi-trophy"></i> <span data-i18n="admin.scoreboard">Scoreboard</span></a>
+  <a href="/admin/pages" class="{{if eq .RequestPath "/admin/pages"}}active{{end}}"><i class="bi bi-file-earmark-text"></i> <span data-i18n="admin.pages">Pages</span></a>
+  <a href="/admin/awards" class="{{if eq .RequestPath "/admin/awards"}}active{{end}}"><i class="bi bi-award"></i> <span data-i18n="admin.awards">Awards</span></a>
+  <a href="/admin/ad" class="{{if eq .RequestPath "/admin/ad"}}active{{end}}"><i class="bi bi-shield-shaded"></i> <span data-i18n="admin.ad">Attack-Defense</span></a>
+  <a href="/admin/config" class="{{if eq .RequestPath "/admin/config"}}active{{end}}"><i class="bi bi-gear"></i> <span data-i18n="admin.config">Config</span></a>
+  <hr>
+  <a href="/"><i class="bi bi-box-arrow-left"></i> <span data-i18n="admin.back">Back to CTF</span></a>
+</aside>
+{{end}}
+
+{{define "footer"}}
+<footer class="ctfd-footer">
+  <div class="container text-center">
+    <p class="mb-0"><a href="/">{{.CTFName}}</a> &middot; <span data-i18n="footer.powered">Powered by a CTFd-compatible platform</span></p>
+  </div>
+</footer>
+<dialog id="ctf-dialog" class="ctf-dialog">
+  <div class="ctf-dialog-card">
+    <p id="ctf-dialog-text"></p>
+    <div class="ctf-dialog-actions">
+      <button type="button" class="btn btn-outline-light" id="ctf-dialog-cancel" data-i18n="dialog.cancel">Cancel</button>
+      <button type="button" class="btn btn-primary" id="ctf-dialog-ok" data-i18n="dialog.ok">Confirm</button>
+    </div>
+  </div>
+</dialog>
+<script src="/static/js/i18n.js?v=13"></script>
+<script src="/static/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+<script>window.CSRF = {{printf "%q" .CSRF}};</script>
+<script src="/static/js/app.js?v=8"></script>
+{{if .PageScript}}<script src="{{.PageScript}}"></script>{{end}}
+</body>
+</html>
+{{end}}

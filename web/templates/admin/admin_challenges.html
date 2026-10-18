@@ -1,0 +1,60 @@
+{{template "head" .}}
+{{template "navbar" .}}
+<div class="admin-wrap">
+{{template "adminnav" .}}
+<main class="admin-main" data-deploy-poll>
+  {{template "flashes" .}}
+  <div class="page-head">
+    <h2 data-i18n="admin.challengesTitle">Challenges</h2>
+    <a class="btn btn-outline-light" href="/admin/challenges/new" data-i18n="admin.new">New Challenge</a>
+  </div>
+  <form method="post" action="/admin/challenges/upload" enctype="multipart/form-data" class="panel p-3 mb-4">
+    <input type="hidden" name="nonce" value="{{.CSRF}}">
+    <label class="form-label" data-i18n="admin.upload">Upload archive</label>
+    <div class="row g-2 align-items-center">
+      <div class="col-md-8"><input class="form-control" type="file" name="archive" accept=".zip,application/zip" required></div>
+      <div class="col-md-4"><button class="btn btn-success w-100" type="submit" data-i18n="admin.import">Import and deploy</button></div>
+    </div>
+    <p class="text-muted small mb-0 mt-2" data-i18n="admin.uploadHint">task.yml or README.md. If docker-compose.yml is inside, the task is built and started automatically.</p>
+  </form>
+  <div class="table-responsive">
+  <table class="table table-hover">
+    <thead><tr>
+      <th>ID</th>
+      <th data-i18n="admin.name">Name</th>
+      <th data-i18n="admin.category">Category</th>
+      <th data-i18n="admin.value">Value</th>
+      <th data-i18n="admin.type">Type</th>
+      <th data-i18n="admin.state">State</th>
+      <th data-i18n="admin.deploy">Deploy</th>
+      <th data-i18n="admin.solves">Solves</th>
+    </tr></thead>
+    <tbody>
+      {{range .Challenges}}
+      <tr>
+        <td>{{.ID}}</td>
+        <td><a href="/admin/challenges/{{.ID}}">{{.Name}}</a></td>
+        <td>{{.Category}}</td>
+        <td>{{.Value}}</td>
+        <td class="tr-msg">{{.Type}}</td>
+        <td class="tr-msg">{{.State}}</td>
+        <td>
+          <span class="deploy-status badge-status {{if .DeployStatus}}badge-{{.DeployStatus}}{{end}}" data-deploy-kind="challenge" data-deploy-id="{{.ID}}" {{if .DeployStatus}}data-i18n="deploy.{{.DeployStatus}}"{{end}}>{{if .DeployStatus}}{{.DeployStatus}}{{else}}—{{end}}</span>
+        </td>
+        <td>{{index $.SolveCounts .ID}}</td>
+      </tr>
+      <tr>
+        <td colspan="8">
+          <details class="deploy-details">
+            <summary data-i18n="admin.log">Build log</summary>
+            <pre class="deploy-log" data-deploy-log="challenge" data-deploy-id="{{.ID}}">{{.DeployLog}}</pre>
+          </details>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  </div>
+</main>
+</div>
+{{template "footer" .}}

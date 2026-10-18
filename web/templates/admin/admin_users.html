@@ -1,0 +1,26 @@
+{{template "head" .}}
+{{template "navbar" .}}
+<div class="admin-wrap">
+{{template "adminnav" .}}
+<main class="admin-main">
+  {{template "flashes" .}}
+  <h2 data-i18n="Users">Users</h2>
+  <table class="table table-hover">
+    <thead><tr><th>ID</th><th data-i18n="Name">Name</th><th data-i18n="Email">Email</th><th data-i18n="Type">Type</th><th data-i18n="Team">Team</th><th data-i18n="Hidden">Hidden</th><th data-i18n="Banned">Banned</th></tr></thead>
+    <tbody>
+      {{range .Users}}
+      <tr>
+        <td>{{.ID}}</td>
+        <td><a href="/admin/users/{{.ID}}">{{.Name}}</a></td>
+        <td>{{.Email}}</td>
+        <td class="tr-msg">{{.Type}}</td>
+        <td>{{if .Team}}{{.Team.Name}}{{end}}</td>
+        <td>{{if .Hidden}}<span data-i18n="yes">yes</span>{{end}}</td>
+        <td>{{if .Banned}}<span data-i18n="yes">yes</span>{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</main>
+</div>
+{{template "footer" .}}

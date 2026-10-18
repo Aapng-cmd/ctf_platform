@@ -1,0 +1,26 @@
+{{template "head" .}}
+{{template "navbar" .}}
+<div class="admin-wrap">
+{{template "adminnav" .}}
+<main class="admin-main">
+  {{template "flashes" .}}
+  <div class="d-flex justify-content-between mb-3">
+    <h2 data-i18n="Pages">Pages</h2>
+    <a class="btn btn-success" href="/admin/pages/new" data-i18n="New Page">New Page</a>
+  </div>
+  <table class="table">
+    <thead><tr><th data-i18n="Title">Title</th><th data-i18n="Route">Route</th><th data-i18n="Draft">Draft</th><th data-i18n="Hidden">Hidden</th></tr></thead>
+    <tbody>
+      {{range .Pages}}
+      <tr>
+        <td><a href="/admin/pages/{{.ID}}">{{.Title}}</a></td>
+        <td>/{{.Route}}</td>
+        <td>{{if .Draft}}<span data-i18n="yes">yes</span>{{end}}</td>
+        <td>{{if .Hidden}}<span data-i18n="yes">yes</span>{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</main>
+</div>
+{{template "footer" .}}

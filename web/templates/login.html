@@ -1,0 +1,23 @@
+{{template "head" .}}
+{{template "navbar" .}}
+{{template "flashes" .}}
+<main class="auth-shell">
+  <div class="auth-card">
+    <h2 data-i18n="login.title">Login</h2>
+    <form method="post">
+      <input type="hidden" name="nonce" value="{{.CSRF}}">
+      <input type="hidden" name="next" value="{{.Next}}">
+      <div class="mb-3">
+        <label class="form-label" data-i18n="login.name">User Name or Email</label>
+        <input class="form-control" name="name" required autofocus data-i18n-placeholder="login.name" placeholder="User Name or Email" autocomplete="username">
+      </div>
+      <div class="mb-3">
+        <label class="form-label" data-i18n="login.password">Password</label>
+        <input class="form-control" type="password" name="password" required data-i18n-placeholder="login.password" placeholder="Password" autocomplete="current-password">
+      </div>
+      <button class="btn btn-primary w-100" type="submit" data-i18n="login.submit">Submit</button>
+    </form>
+    <p class="mt-3 mb-0 text-center"><a href="/register" data-i18n="login.register">Don't have an account yet?</a></p>
+  </div>
+</main>
+{{template "footer" .}}

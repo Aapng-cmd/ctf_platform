@@ -1,0 +1,19 @@
+{{template "head" .}}
+{{template "navbar" .}}
+<div class="admin-wrap">
+{{template "adminnav" .}}
+<main class="admin-main">
+  {{template "flashes" .}}
+  <h2 data-i18n="Scoreboard">Scoreboard</h2>
+  <p class="text-muted" data-i18n="Live view including hidden accounts. Freeze is ignored here.">Live view including hidden accounts. Freeze is ignored here.</p>
+  <table class="table">
+    <thead><tr><th data-i18n="Place">Place</th><th data-i18n="Name">Name</th><th data-i18n="Score">Score</th><th data-i18n="Solves">Solves</th></tr></thead>
+    <tbody>
+      {{range .Standings}}
+      <tr><td>{{.Place}}</td><td>{{.Name}}</td><td>{{.Score}}</td><td>{{.Solves}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+</main>
+</div>
+{{template "footer" .}}
