@@ -499,33 +499,46 @@ func (a *App) AdminAwardDelete(c *gin.Context) {
 }
 
 func (a *App) AdminConfigGET(c *gin.Context) {
+	loc := a.Store.Location()
 	a.HTML(c, http.StatusOK, "admin_config.html", gin.H{
 		"Title": "Config", "Admin": true, "Config": map[string]string{
 			"ctf_name":                a.Store.Get("ctf_name"),
 			"ctf_description":         a.Store.Get("ctf_description"),
 			"user_mode":               a.Store.UserMode(),
 			"game_mode":               a.Store.GameMode(),
-			"start":                   a.Store.Get("start"),
-			"end":                     a.Store.Get("end"),
-			"freeze":                  a.Store.Get("freeze"),
+			"timezone":                a.Store.Timezone(),
+			"start":                   clockInput(a.Store.Start(), loc),
+			"end":                     clockInput(a.Store.End(), loc),
+			"freeze":                  clockInput(a.Store.Freeze(), loc),
 			"challenge_visibility":    a.Store.ChallengeVisibility(),
 			"score_visibility":        a.Store.ScoreVisibility(),
 			"account_visibility":      a.Store.AccountVisibility(),
 			"registration_visibility": a.Store.RegistrationVisibility(),
 			"max_team_size":           a.Store.GetDefault("max_team_size", "0"),
-		}, "Flashes": a.flashes(c),
+		},
+		"ZoneNow": time.Now().In(loc).Format("2006-01-02 15:04 MST"),
+		"Flashes": a.flashes(c),
 	})
 }
 
 func (a *App) AdminConfigPOST(c *gin.Context) {
+	loc, zone, err := loadZone(c.PostForm("timezone"))
+	if err != nil {
+		a.flash(c, "danger", "Unknown timezone")
+		c.Redirect(http.StatusFound, "/admin/config")
+		return
+	}
 	keys := []string{
-		"ctf_name", "ctf_description", "user_mode", "game_mode", "start", "end", "freeze",
+		"ctf_name", "ctf_description", "user_mode", "game_mode",
 		"challenge_visibility", "score_visibility", "account_visibility",
 		"registration_visibility", "max_team_size",
 	}
-	pairs := map[string]string{}
+	pairs := map[string]string{"timezone": zone}
 	for _, k := range keys {
 		pairs[k] = c.PostForm(k)
+	}
+	for _, k := range []string{"start", "end", "freeze"} {
+		pairs[k] = clockValue(c.PostForm(k), loc)
 	}
 	if pairs["game_mode"] == models.GameAttackDefense || pairs["game_mode"] == models.GameMixed {
 		pairs["user_mode"] = models.ModeTeams
@@ -575,7 +588,9 @@ func (a *App) AdminReset(c *gin.Context) {
 	_ = a.DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.Award{}).Error
 	_ = a.DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.ADSteal{}).Error
 	_ = a.DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.ADCheck{}).Error
-	_ = a.DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.ADFlag{}).Error
+	if a.Flags != nil {
+		a.Flags.DeleteAll()
+	}
 	_ = a.DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.ADRound{}).Error
 	a.flash(c, "success", "Solves, submissions, unlocks, awards and Attack-Defense rounds were wiped")
 	c.Redirect(http.StatusFound, "/admin/config")

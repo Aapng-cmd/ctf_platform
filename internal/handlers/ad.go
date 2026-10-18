@@ -37,8 +37,8 @@ func (a *App) AttackPage(c *gin.Context) {
 	round := ad.CurrentRound(a.DB)
 	var insts []models.ADInstance
 	a.DB.Joins("Team").Joins("Service").
-		Where("Service.active = ? AND Team.banned = ? AND Team.hidden = ?", true, false, false).
-		Order("Team.name, Service.id").Find(&insts)
+		Where(`"Service"."active" = ? AND "Team"."banned" = ? AND "Team"."hidden" = ?`, true, false, false).
+		Order(`"Team"."name", "Service"."id"`).Find(&insts)
 	var mine []models.ADInstance
 	if u.TeamID != nil {
 		a.DB.Preload("Service").Where("team_id = ?", *u.TeamID).Find(&mine)
@@ -75,7 +75,7 @@ func (a *App) AttackPage(c *gin.Context) {
 		"Instances": insts, "Mine": mine, "Steals": steals, "Checks": checkMap, "ServiceNames": serviceNames,
 		"Captain": captain, "Token": token, "FlagHint": a.flagHint(),
 		"SubmitURL":  requestBase(c) + "/api/v1/ad/flags",
-		"PageScript": "/static/js/attack.js?v=1", "Flashes": a.flashes(c),
+		"PageScript": "/static/js/attack.js?v=3", "Flashes": a.flashes(c),
 	})
 }
 
@@ -149,7 +149,8 @@ func adError(c *gin.Context, code int, msg string) {
 }
 
 // adSubmitter resolves the team either from the X-Team-Token header (scripts)
-// or from the browser session, which must also send the CSRF token.
+// or from the browser session. Flag submission does not require a CSRF token:
+// the session cookie is enough, and scripts authenticate with the team token.
 func (a *App) adSubmitter(c *gin.Context) (*models.Team, uint, bool) {
 	var team models.Team
 	if tok := strings.TrimSpace(c.GetHeader("X-Team-Token")); tok != "" {
@@ -166,10 +167,6 @@ func (a *App) adSubmitter(c *gin.Context) (*models.Team, uint, bool) {
 	u := middleware.CurrentUser(c)
 	if u == nil {
 		adError(c, http.StatusUnauthorized, "Authentication required")
-		return nil, 0, false
-	}
-	if c.GetHeader("CSRF-Token") != c.GetString("csrf") && c.PostForm("nonce") != c.GetString("csrf") {
-		adError(c, http.StatusForbidden, "Invalid CSRF token")
 		return nil, 0, false
 	}
 	if u.Banned {
@@ -243,6 +240,10 @@ func (a *App) AttackSubmit(c *gin.Context) {
 		adError(c, http.StatusForbidden, "Attack-Defense is not active")
 		return
 	}
+	if a.Store.Preparing() {
+		adError(c, http.StatusForbidden, "Preparation is in progress")
+		return
+	}
 	if !a.ADLimiter.Allow("ad:" + strconv.Itoa(int(team.ID))) {
 		adError(c, http.StatusTooManyRequests, "Too many submissions")
 		return
@@ -274,8 +275,8 @@ func (a *App) AttackSubmit(c *gin.Context) {
 
 func (a *App) submitADFlag(teamID, userID uint, flag string) adFlagResult {
 	res := adFlagResult{Flag: flag, Status: "incorrect", Message: "Invalid flag"}
-	var fl models.ADFlag
-	if a.DB.Where("flag = ?", flag).First(&fl).Error != nil {
+	fl, ok := a.Flags.ByValue(flag)
+	if !ok {
 		return res
 	}
 	if fl.TeamID == teamID {
@@ -369,7 +370,11 @@ func (a *App) adBoard(admin bool) scoring.ADBoard {
 	a.adCache.mu.Lock()
 	defer a.adCache.mu.Unlock()
 	if time.Since(a.adCache.at[i]) > adCacheTTL {
-		a.adCache.board[i] = scoring.ADDashboard(a.DB, admin)
+		var defended map[[2]uint]int
+		if a.Flags != nil {
+			defended = a.Flags.Defended()
+		}
+		a.adCache.board[i] = scoring.ADDashboard(a.DB, defended, admin)
 		a.adCache.at[i] = time.Now()
 	}
 	return a.adCache.board[i]
@@ -402,7 +407,7 @@ func (a *App) DashboardPage(c *gin.Context) {
 	}
 	a.HTML(c, http.StatusOK, "dashboard.html", gin.H{
 		"Title": "Dashboard", "Board": a.dashboardData(u),
-		"PageScript": "/static/js/dashboard.js?v=3", "Flashes": a.flashes(c),
+		"PageScript": "/static/js/dashboard.js?v=4", "Flashes": a.flashes(c),
 	})
 }
 
@@ -449,6 +454,7 @@ func (a *App) dashboardData(u *models.User) gin.H {
 	}
 	return gin.H{
 		"round": a.roundInfo(), "paused": a.Store.ADPaused(), "during": a.Store.DuringCTF(),
+		"preparing": a.Store.Preparing(), "prep_seconds_left": a.Store.PrepSecondsLeft(),
 		"services": board.Services, "teams": teams, "me": mine,
 	}
 }
@@ -481,7 +487,9 @@ func (a *App) AdminAD(c *gin.Context) {
 	var steals []models.ADSteal
 	a.DB.Preload("Attacker").Preload("Victim").Order("date DESC").Limit(50).Find(&steals)
 	var flags []models.ADFlag
-	a.DB.Order("id DESC").Limit(400).Find(&flags)
+	if a.Flags != nil {
+		flags = a.Flags.Recent(400)
+	}
 	latest := map[string]models.ADFlag{}
 	for _, fl := range flags {
 		key := strconv.Itoa(int(fl.TeamID)) + ":" + strconv.Itoa(int(fl.ServiceID))
@@ -517,6 +525,7 @@ func (a *App) AdminAD(c *gin.Context) {
 		"TeamNames": teamNames, "ServiceNames": serviceNames,
 		"Paused": a.Store.ADPaused(), "RoundSeconds": a.Store.ADRoundSeconds(),
 		"FlagLife": a.Store.ADFlagLifetime(), "FlagPrefix": a.Store.ADFlagPrefix(),
+		"PrepStart": clockInput(a.Store.ADPrepStart(), a.Store.Location()), "PrepMinutes": a.Store.ADPrepMinutes(),
 		"Flashes": a.flashes(c),
 	})
 }
@@ -531,9 +540,57 @@ func (a *App) AdminADConfigPOST(c *gin.Context) {
 		"ad_round_seconds":        c.PostForm("ad_round_seconds"),
 		"ad_flag_lifetime_rounds": c.PostForm("ad_flag_lifetime_rounds"),
 		"ad_flag_prefix":          c.PostForm("ad_flag_prefix"),
+		"ad_prep_start":           clockValue(c.PostForm("ad_prep_start"), a.Store.Location()),
+		"ad_prep_minutes":         c.PostForm("ad_prep_minutes"),
 	})
 	a.flash(c, "success", "Attack-Defense settings saved")
 	c.Redirect(http.StatusFound, "/admin/ad")
+}
+
+func clockInput(t *time.Time, loc *time.Location) string {
+	if t == nil {
+		return ""
+	}
+	if loc == nil {
+		loc = time.UTC
+	}
+	return t.In(loc).Format("2006-01-02T15:04")
+}
+
+func clockValue(raw string, loc *time.Location) string {
+	t := parseClock(raw, loc)
+	if t == nil {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
+}
+
+func parseClock(raw string, loc *time.Location) *time.Time {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	if loc == nil {
+		loc = time.UTC
+	}
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return &t
+	}
+	for _, layout := range []string{"2006-01-02T15:04", "2006-01-02 15:04:05", "2006-01-02 15:04"} {
+		if t, err := time.ParseInLocation(layout, raw, loc); err == nil {
+			return &t
+		}
+	}
+	return nil
+}
+
+func loadZone(name string) (*time.Location, string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = "UTC"
+	}
+	loc, err := time.LoadLocation(name)
+	return loc, name, err
 }
 
 func formInt(c *gin.Context, key string, def int) int {
@@ -608,7 +665,9 @@ func (a *App) AdminADServiceDelete(c *gin.Context) {
 		_, _ = tasks.DownVolumes(svc.ComposeDir)
 	}
 	a.DB.Where("service_id = ?", id).Delete(&models.ADInstance{})
-	a.DB.Where("service_id = ?", id).Delete(&models.ADFlag{})
+	if a.Flags != nil {
+		a.Flags.DeleteService(uint(id))
+	}
 	a.DB.Where("service_id = ?", id).Delete(&models.ADCheck{})
 	a.DB.Where("service_id = ?", id).Delete(&models.ADSteal{})
 	a.DB.Delete(&models.ADService{}, id)

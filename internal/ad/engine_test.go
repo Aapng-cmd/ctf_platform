@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aapng-cmd/ctf_platform/internal/flags"
 	"github.com/aapng-cmd/ctf_platform/internal/models"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -24,7 +25,7 @@ func engineDB(t *testing.T) *gorm.DB {
 
 func TestSettleFlagsDefense(t *testing.T) {
 	db := engineDB(t)
-	e := &Engine{DB: db}
+	e := &Engine{DB: db, Flags: flags.NewMemory()}
 	svc := models.ADService{Name: "svc", Active: true}
 	db.Create(&svc)
 	team := models.Team{Name: "t"}
@@ -45,7 +46,9 @@ func TestSettleFlagsDefense(t *testing.T) {
 	flag := func(name string, r models.ADRound, put string, life time.Duration) models.ADFlag {
 		fl := models.ADFlag{RoundID: r.ID, ServiceID: svc.ID, TeamID: team.ID, Flag: name,
 			Issued: r.Started, Expires: r.Started.Add(life), PutStatus: put}
-		db.Create(&fl)
+		if err := e.Flags.Save(&fl); err != nil {
+			t.Fatal(err)
+		}
 		return fl
 	}
 
@@ -74,9 +77,7 @@ func TestSettleFlagsDefense(t *testing.T) {
 		putFailed.ID: {true, false},
 		alive.ID:     {false, false},
 	}
-	var flags []models.ADFlag
-	db.Find(&flags)
-	for _, fl := range flags {
+	for _, fl := range e.Flags.Recent(20) {
 		w := want[fl.ID]
 		if fl.Settled != w[0] || fl.Defended != w[1] {
 			t.Errorf("%s: settled=%v defended=%v, want %v", fl.Flag, fl.Settled, fl.Defended, w)

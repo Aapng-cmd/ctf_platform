@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aapng-cmd/ctf_platform/internal/flags"
 	"github.com/aapng-cmd/ctf_platform/internal/models"
 	"github.com/aapng-cmd/ctf_platform/internal/store"
 	"github.com/aapng-cmd/ctf_platform/internal/tasks"
@@ -20,15 +21,17 @@ import (
 type Engine struct {
 	DB    *gorm.DB
 	Store *store.Store
+	Flags flags.Store
 	http  *http.Client
 	stop  chan struct{}
 	mu    sync.Mutex
 }
 
-func New(db *gorm.DB, st *store.Store) *Engine {
+func New(db *gorm.DB, st *store.Store, fl flags.Store) *Engine {
 	return &Engine{
 		DB:    db,
 		Store: st,
+		Flags: fl,
 		http:  &http.Client{Timeout: 30 * time.Second},
 		stop:  make(chan struct{}),
 	}
@@ -63,6 +66,10 @@ func (e *Engine) loop() {
 
 func (e *Engine) tick() {
 	if !e.Store.IsAD() {
+		return
+	}
+	// Preparation writes no checks and settles nothing, so the score cannot move.
+	if e.Store.Preparing() {
 		return
 	}
 	e.settleFlags()
@@ -117,16 +124,19 @@ func (e *Engine) startRound(n int) {
 			RoundID: round.ID, ServiceID: inst.ServiceID, TeamID: inst.TeamID,
 			Flag: flag, Issued: now, Expires: now.Add(life),
 		}
-		_ = e.DB.Create(&row).Error
+		if e.Flags != nil {
+			_ = e.Flags.Save(&row)
+		}
 	}
 	e.pushFlags(&round)
 	e.runChecks(&round)
 }
 
 func (e *Engine) retryPuts(round *models.ADRound) {
-	var flags []models.ADFlag
-	e.DB.Where("round_id = ? AND (put_message = ? OR put_status = ?)", round.ID, models.ADNoHostMessage, models.CheckError).Find(&flags)
-	for _, fl := range flags {
+	if e.Flags == nil {
+		return
+	}
+	for _, fl := range e.Flags.NeedsPut(round.ID) {
 		var inst models.ADInstance
 		if err := e.DB.Preload("Service").Preload("Team").Where("team_id = ? AND service_id = ?", fl.TeamID, fl.ServiceID).First(&inst).Error; err != nil {
 			continue
@@ -135,7 +145,7 @@ func (e *Engine) retryPuts(round *models.ADRound) {
 			continue
 		}
 		status, msg := e.plant(inst, fl)
-		_ = e.DB.Model(&fl).Updates(map[string]any{"put_status": status, "put_message": msg}).Error
+		_ = e.Flags.SetPut(fl.ID, status, msg)
 		if status != models.CheckError && round.ChecksDone {
 			// The host was set during the round: replace the "no host" DOWN with a real check.
 			e.DB.Where("round_id = ? AND team_id = ? AND service_id = ? AND message = ?",
@@ -148,10 +158,11 @@ func (e *Engine) retryPuts(round *models.ADRound) {
 // settleFlags marks expired flags as defended when the checker saw the flag in its
 // round, the service never failed while the flag was alive and nobody stole it.
 func (e *Engine) settleFlags() {
+	if e.Flags == nil {
+		return
+	}
 	cutoff := time.Now().Add(-5 * time.Second)
-	var flags []models.ADFlag
-	e.DB.Where("settled = ? AND expires < ?", false, cutoff).Order("id").Limit(1000).Find(&flags)
-	for _, fl := range flags {
+	for _, fl := range e.Flags.Unsettled(cutoff, 1000) {
 		defended := false
 		if fl.PutStatus == models.CheckOK {
 			var seen, failed, stolen int64
@@ -162,20 +173,21 @@ func (e *Engine) settleFlags() {
 			e.DB.Model(&models.ADSteal{}).Where("flag_id = ?", fl.ID).Count(&stolen)
 			defended = seen > 0 && failed == 0 && stolen == 0
 		}
-		_ = e.DB.Model(&models.ADFlag{}).Where("id = ?", fl.ID).Updates(map[string]any{"settled": true, "defended": defended}).Error
+		_ = e.Flags.Settle(fl.ID, defended)
 	}
 }
 
 func (e *Engine) pushFlags(round *models.ADRound) {
-	var flags []models.ADFlag
-	e.DB.Where("round_id = ?", round.ID).Find(&flags)
-	for _, fl := range flags {
+	if e.Flags == nil {
+		return
+	}
+	for _, fl := range e.Flags.ByRound(round.ID) {
 		var inst models.ADInstance
 		if err := e.DB.Preload("Service").Where("team_id = ? AND service_id = ?", fl.TeamID, fl.ServiceID).First(&inst).Error; err != nil {
 			continue
 		}
 		status, msg := e.plant(inst, fl)
-		_ = e.DB.Model(&fl).Updates(map[string]any{"put_status": status, "put_message": msg}).Error
+		_ = e.Flags.SetPut(fl.ID, status, msg)
 	}
 }
 
@@ -252,7 +264,9 @@ func (e *Engine) checkOne(round *models.ADRound, inst models.ADInstance) {
 		return
 	}
 	var fl models.ADFlag
-	_ = e.DB.Where("round_id = ? AND service_id = ? AND team_id = ?", round.ID, inst.ServiceID, inst.TeamID).First(&fl).Error
+	if e.Flags != nil {
+		fl, _ = e.Flags.ByRoundTeamService(round.ID, inst.TeamID, inst.ServiceID)
+	}
 	status, msg := e.check(inst, fl)
 	if status == models.CheckError {
 		return

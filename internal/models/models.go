@@ -99,7 +99,7 @@ func (Team) TableName() string { return "teams" }
 type Challenge struct {
 	ID             uint      `gorm:"primaryKey" json:"id"`
 	Name           string    `gorm:"size:128;not null" json:"name"`
-	Description    string    `gorm:"type:longtext" json:"description"`
+	Description    string    `gorm:"type:text" json:"description"`
 	Attribution    string    `gorm:"size:255" json:"attribution"`
 	MaxAttempts    int       `gorm:"default:0" json:"max_attempts"`
 	Value          int       `json:"value"`
@@ -114,7 +114,7 @@ type Challenge struct {
 	Function       string    `gorm:"size:32;default:linear" json:"function"`
 	ComposeDir     string    `gorm:"size:512" json:"-"`
 	DeployStatus   string    `gorm:"size:32" json:"deploy_status"`
-	DeployLog      string    `gorm:"type:longtext" json:"-"`
+	DeployLog      string    `gorm:"type:text" json:"-"`
 	Created        time.Time `json:"created"`
 	Flags          []Flag    `gorm:"constraint:OnDelete:CASCADE;" json:"flags,omitempty"`
 	Hints          []Hint    `gorm:"constraint:OnDelete:CASCADE;" json:"hints,omitempty"`
@@ -233,7 +233,7 @@ type Page struct {
 	ID           uint   `gorm:"primaryKey" json:"id"`
 	Title        string `gorm:"size:80" json:"title"`
 	Route        string `gorm:"size:128;uniqueIndex" json:"route"`
-	Content      string `gorm:"type:longtext" json:"content"`
+	Content      string `gorm:"type:text" json:"content"`
 	Draft        bool   `gorm:"default:false" json:"draft"`
 	Hidden       bool   `gorm:"default:false" json:"hidden"`
 	AuthRequired bool   `gorm:"default:false" json:"auth_required"`
@@ -284,7 +284,7 @@ type ADService struct {
 	ComposeDir     string `gorm:"size:512" json:"-"`
 	CheckerService string `gorm:"size:64" json:"checker_service"`
 	DeployStatus   string `gorm:"size:32" json:"deploy_status"`
-	DeployLog      string `gorm:"type:longtext" json:"-"`
+	DeployLog      string `gorm:"type:text" json:"-"`
 }
 
 func (ADService) TableName() string { return "ad_services" }
@@ -311,6 +311,7 @@ type ADRound struct {
 
 func (ADRound) TableName() string { return "ad_rounds" }
 
+// ADFlag lives in Redis, not Postgres. The struct is the document the flag store reads and writes.
 type ADFlag struct {
 	ID         uint      `gorm:"primaryKey" json:"id"`
 	RoundID    uint      `gorm:"index;not null" json:"round_id"`

@@ -57,8 +57,8 @@ type ADBoard struct {
 	Teams    []ADStanding     `json:"teams"`
 }
 
-func ADScoreboard(db *gorm.DB, includeHidden bool) []ADStanding {
-	return ADDashboard(db, includeHidden).Teams
+func ADScoreboard(db *gorm.DB, defended map[[2]uint]int, includeHidden bool) []ADStanding {
+	return ADDashboard(db, defended, includeHidden).Teams
 }
 
 // ADDashboard scores every team per service:
@@ -66,7 +66,8 @@ func ADScoreboard(db *gorm.DB, includeHidden bool) []ADStanding {
 // defense = DefenseReward per own flag that survived its lifetime unstolen,
 // SLA = SLAReward per OK round, down = DownPenalty × opponents per failed round.
 // Every non-banned, non-hidden team plays, so a missing host is a failed round.
-func ADDashboard(db *gorm.DB, includeHidden bool) ADBoard {
+// defended maps [teamID, serviceID] to the number of flags Redis marked defended.
+func ADDashboard(db *gorm.DB, defended map[[2]uint]int, includeHidden bool) ADBoard {
 	type key struct{ team, svc uint }
 
 	var teams []models.Team
@@ -136,13 +137,10 @@ func ADDashboard(db *gorm.DB, includeHidden bool) ADBoard {
 		Status    string
 		N         int
 	}
-	var defended []countAgg
-	db.Model(&models.ADFlag{}).Select("team_id, service_id, COUNT(*) AS n").
-		Where("defended = ?", true).Group("team_id, service_id").Scan(&defended)
-	for _, r := range defended {
-		c := cell(r.TeamID, r.ServiceID)
-		c.Defended += r.N
-		c.Defense += r.N * svcByID[r.ServiceID].DefenseReward
+	for k, n := range defended {
+		c := cell(k[0], k[1])
+		c.Defended += n
+		c.Defense += n * svcByID[k[1]].DefenseReward
 	}
 
 	var aggs []countAgg

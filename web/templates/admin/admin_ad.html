@@ -30,6 +30,15 @@
       <label class="form-label" data-i18n="admin.flagPrefix">Flag prefix</label>
       <input class="form-control" name="ad_flag_prefix" value="{{.FlagPrefix}}">
     </div>
+    <div>
+      <label class="form-label" data-i18n="admin.prepStart">Preparation starts</label>
+      <input class="form-control" type="datetime-local" name="ad_prep_start" value="{{.PrepStart}}">
+      <div class="form-text">{{timezone}}</div>
+    </div>
+    <div>
+      <label class="form-label" data-i18n="admin.prepMinutes">Preparation (minutes)</label>
+      <input class="form-control" name="ad_prep_minutes" value="{{.PrepMinutes}}" inputmode="numeric">
+    </div>
     <div class="field-check">
       <div class="form-check mb-0">
         <input class="form-check-input" type="checkbox" name="ad_paused" id="adPaused" {{if .Paused}}checked{{end}}>

@@ -7,7 +7,7 @@ import (
 
 	"github.com/aapng-cmd/ctf_platform/internal/config"
 	"github.com/aapng-cmd/ctf_platform/internal/models"
-	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -18,15 +18,16 @@ func Open(cfg config.Config) (*gorm.DB, error) {
 		dial gorm.Dialector
 		err  error
 	)
-	if cfg.Driver == "sqlite" {
+	switch cfg.Driver {
+	case "sqlite":
 		if err = os.MkdirAll(filepath.Dir(cfg.DatabaseURL), 0o755); err != nil && !os.IsExist(err) {
 			if filepath.Dir(cfg.DatabaseURL) != "." {
 				return nil, err
 			}
 		}
 		dial = sqlite.Open(cfg.DatabaseURL)
-	} else {
-		dial = mysql.Open(cfg.DatabaseURL)
+	default:
+		dial = postgres.Open(cfg.DatabaseURL)
 	}
 
 	var gdb *gorm.DB
@@ -70,7 +71,6 @@ func Migrate(gdb *gorm.DB) error {
 		&models.ADService{},
 		&models.ADInstance{},
 		&models.ADRound{},
-		&models.ADFlag{},
 		&models.ADSteal{},
 		&models.ADCheck{},
 	)

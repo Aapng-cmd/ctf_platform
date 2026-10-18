@@ -87,6 +87,10 @@
 
   function render() {
     if (!state) return;
+    if (state.preparing) {
+      boardEl.innerHTML = '<div class="panel p-4">' + esc(T("dash.prep")) + "</div>";
+      return;
+    }
     const services = state.services || [];
     const teams = state.teams || [];
     numEl.textContent = state.round && state.round.number ? state.round.number : "—";
@@ -122,12 +126,23 @@
   }
 
   function setDeadline() {
+    if (state && state.preparing) {
+      deadline = Date.now() + (state.prep_seconds_left || 0) * 1000;
+      return;
+    }
     const left = state && state.round ? state.round.seconds_left || 0 : 0;
     deadline = Date.now() + left * 1000;
   }
 
   function tickTimer() {
     if (!state) return;
+    if (state.preparing) {
+      numEl.textContent = "—";
+      const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      leftEl.textContent = T("dash.prepLeft").replace("{n}", left);
+      barEl.style.width = "0%";
+      return;
+    }
     const total = (state.round && state.round.round_seconds) || 0;
     if (state.paused || !state.during) {
       leftEl.textContent = state.paused ? T("dash.paused") : T("dash.stopped");

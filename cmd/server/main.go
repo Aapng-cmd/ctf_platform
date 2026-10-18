@@ -16,6 +16,7 @@ import (
 	"github.com/aapng-cmd/ctf_platform/internal/ad"
 	"github.com/aapng-cmd/ctf_platform/internal/config"
 	"github.com/aapng-cmd/ctf_platform/internal/db"
+	"github.com/aapng-cmd/ctf_platform/internal/flags"
 	"github.com/aapng-cmd/ctf_platform/internal/handlers"
 	"github.com/aapng-cmd/ctf_platform/internal/middleware"
 	"github.com/aapng-cmd/ctf_platform/internal/store"
@@ -44,13 +45,18 @@ func main() {
 		log.Fatalf("migrate: %v", err)
 	}
 	st := store.New(gdb)
-	eng := ad.New(gdb, st)
+	flagStore, err := flags.Open(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)
+	if err != nil {
+		log.Fatalf("redis: %v", err)
+	}
+	eng := ad.New(gdb, st, flagStore)
 	eng.Start()
 	defer eng.Stop()
 	app, err := handlers.New(gdb, st, cfg)
 	if err != nil {
 		log.Fatalf("app: %v", err)
 	}
+	app.Flags = flagStore
 	go app.RestoreDeployedTasks()
 
 	if os.Getenv("GIN_MODE") == "" {

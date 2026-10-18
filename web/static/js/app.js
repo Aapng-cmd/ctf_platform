@@ -209,7 +209,10 @@ document.addEventListener("submit", function (e) {
                 color: "#9aa8bd",
                 callback: function (value) {
                   const d = new Date(value);
-                  return isNaN(d.getTime()) ? value : d.toLocaleString();
+                  if (isNaN(d.getTime())) return value;
+                  const zone = (document.querySelector('meta[name="ctf-timezone"]') || {}).content || "UTC";
+                  const lang = document.documentElement.lang || "ru";
+                  try { return d.toLocaleString(lang, { timeZone: zone }); } catch (e) { return d.toLocaleString(); }
                 }
               },
               grid: { color: "#2a3b55" }

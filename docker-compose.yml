@@ -5,12 +5,13 @@ services:
       - "8000:8000"
     environment:
       PORT: "8000"
-      DB_DRIVER: mysql
-      MYSQL_HOST: mysql
-      MYSQL_PORT: "3306"
-      MYSQL_DATABASE: ctfd
-      MYSQL_USER: ctfd
-      MYSQL_PASSWORD: ctfd
+      DB_DRIVER: postgres
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ctfd
+      POSTGRES_USER: ctfd
+      POSTGRES_PASSWORD: ctfd
+      REDIS_ADDR: redis:6379
       SECRET_KEY: ${SECRET_KEY:-change-this-to-a-long-random-string}
       UPLOAD_DIR: /app/data/uploads
       DATA_DIR: /app/data
@@ -18,7 +19,9 @@ services:
       PUBLIC_HOST: ${PUBLIC_HOST:-127.0.0.1}
       GIN_MODE: release
     depends_on:
-      mysql:
+      postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -28,31 +31,35 @@ services:
     stop_grace_period: 2m
     restart: unless-stopped
 
-  mysql:
-    image: mariadb:11
+  postgres:
+    image: postgres:16-alpine
     environment:
-      MARIADB_DATABASE: ctfd
-      MARIADB_USER: ctfd
-      MARIADB_PASSWORD: ctfd
-      MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
-      MYSQL_DATABASE: ctfd
-      MYSQL_USER: ctfd
-      MYSQL_PASSWORD: ctfd
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
-    command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
-      - --skip-name-resolve
+      POSTGRES_DB: ctfd
+      POSTGRES_USER: ctfd
+      POSTGRES_PASSWORD: ctfd
     volumes:
-      - mariadb_data:/var/lib/mysql
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      test: ["CMD-SHELL", "pg_isready -U ctfd -d ctfd"]
       interval: 5s
       timeout: 5s
-      retries: 30
-      start_period: 40s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     restart: unless-stopped
 
 volumes:
-  mariadb_data:
+  postgres_data:
+  redis_data:
   uploads:

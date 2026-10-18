@@ -16,7 +16,7 @@ Swagger / OpenAPI UI is **closed to the public** and only answers from **localho
 - Attempt limits and per-user rate limiting
 - First blood, awards, hidden/banned accounts
 - Scoreboard with freeze and top-10 graph
-- Attack-Defense mode (rounds, SLA checks, stolen flags)
+- Attack-Defense mode (rounds, SLA checks, stolen flags). Round flags live in Redis
 - Pages CMS and broadcast notifications
 - Admin: statistics, challenges, users, teams, submissions, scoreboard, pages, awards, config, reset
 - Visibility controls for challenges, scores, accounts, and registration
@@ -35,15 +35,20 @@ Open [http://localhost:8000](http://localhost:8000) and complete `/setup`.
 
 ## Local development
 
-MySQL/MariaDB or SQLite:
+Postgres and Redis, or SQLite for a database-only trial (Attack-Defense flags still need Redis):
 
 ```bash
-# SQLite
-export DB_DRIVER=sqlite
-export SQLITE_PATH=data/ctfd.db
+export DB_DRIVER=postgres
+export POSTGRES_HOST=127.0.0.1
+export POSTGRES_USER=ctfd
+export POSTGRES_PASSWORD=ctfd
+export POSTGRES_DB=ctfd
+export REDIS_ADDR=127.0.0.1:6379
 export SECRET_KEY=dev-secret
 go run ./cmd/server
 ```
+
+SQLite replaces only Postgres (`DB_DRIVER=sqlite`, `SQLITE_PATH=data/ctfd.db`). Redis stays required.
 
 The process listens on `:8000` by default (`PORT`).
 
@@ -174,7 +179,9 @@ A dead service therefore costs more than being robbed by every other team. `ERRO
 
 A service added by hand, without an archive, can still use an HTTP checker. The jury `POST`s JSON `{"action":"put"|"check","team_id":1,"host":"...","port":1337,"flag":"FLAG{...}","round":3,"service":"web"}` and expects `{"status":"OK|DOWN|CORRUPT|MUMBLE","message":"..."}`. With no checker URL and no Compose, SLA is a TCP connect to `host:port`.
 
-Unpause the engine under **Admin → Attack-Defense** so rounds start.
+Unpause the engine under **Admin → Attack-Defense** so rounds start. **Preparation starts** plus **Preparation (minutes)** holds the checkers and the score until that moment: no flags are planted, no checks are written, and stolen flags are rejected. The dashboard shows the countdown and switches to the live table when the window ends. A zero duration disables the window. Those times, and every other clock on the site, use the timezone from **Admin → Config**. One zone is shared by all participants. A wall-clock value is stored as an absolute instant.
+
+`scripts/ad_bootstrap.py` creates the admin and the teams alpha, bravo and gamma. When `TASK_DIR` and `CHECKER_ZIP` point at a service, it also starts that service on three host ports and uploads only the checker archive. The platform does not start the vulnerable container from the zip. Defaults: `/home/kali/my_AD_examples/AD1/bucket` and `bucket.zip`, ports 18101–18103, checker target `127.0.0.1`.
 
 ### Submitting flags
 
@@ -193,7 +200,7 @@ The `/dashboard` page (team × service grid with live status) is public, includi
 
 ## Database
 
-If `docker compose` used to fail on MySQL, this stack now uses **MariaDB 11** with a delayed healthcheck. Remove an old broken volume with `docker compose down -v` before the first start.
+Accounts, challenges, rounds, checks and steals are in **Postgres 16**. Attack-Defense flags are in **Redis 7** (AOF, so they survive a restart): a submit looks the flag up by its string, and each round writes one flag per team and service. Jeopardy flags stay in Postgres with the challenge. An old MariaDB volume is not reused; `docker compose down` leaves it on disk, and the new database starts empty.
 
 ## API (session cookie)
 

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/aapng-cmd/ctf_platform/internal/models"
 	"gorm.io/gorm"
@@ -64,9 +65,15 @@ func (s *Store) Int(key string, fallback int) int {
 	return n
 }
 
+func upsertConfig(tx *gorm.DB, key, value string) error {
+	row := models.ConfigKV{Key: key}
+	// The column is named key. Pass it as a field so the driver quotes it;
+	// a raw `key` is MySQL syntax and Postgres rejects it.
+	return tx.Where(&models.ConfigKV{Key: key}).Assign(models.ConfigKV{Value: value}).FirstOrCreate(&row).Error
+}
+
 func (s *Store) Set(key, value string) error {
-	row := models.ConfigKV{Key: key, Value: value}
-	if err := s.DB.Where("`key` = ?", key).Assign(models.ConfigKV{Value: value}).FirstOrCreate(&row).Error; err != nil {
+	if err := upsertConfig(s.DB, key, value); err != nil {
 		return err
 	}
 	s.mu.Lock()
@@ -78,8 +85,7 @@ func (s *Store) Set(key, value string) error {
 func (s *Store) SetMany(pairs map[string]string) error {
 	return s.DB.Transaction(func(tx *gorm.DB) error {
 		for k, v := range pairs {
-			row := models.ConfigKV{Key: k, Value: v}
-			if err := tx.Where("`key` = ?", k).Assign(models.ConfigKV{Value: v}).FirstOrCreate(&row).Error; err != nil {
+			if err := upsertConfig(tx, k, v); err != nil {
 				return err
 			}
 		}
@@ -155,22 +161,95 @@ func (s *Store) ADFlagPrefix() string {
 	return s.GetDefault("ad_flag_prefix", "FLAG{")
 }
 
+func (s *Store) ADPrepMinutes() int {
+	n := s.Int("ad_prep_minutes", 0)
+	if n < 0 {
+		return 0
+	}
+	return n
+}
+
+func (s *Store) ADPrepStart() *time.Time { return s.ParseTime("ad_prep_start") }
+
+// ADPrepEnd is the moment checkers and scoring may start. A missing start or a
+// zero duration means there is no preparation window.
+func (s *Store) ADPrepEnd() *time.Time {
+	start := s.ADPrepStart()
+	mins := s.ADPrepMinutes()
+	if start == nil || mins <= 0 {
+		return nil
+	}
+	end := start.Add(time.Duration(mins) * time.Minute)
+	return &end
+}
+
+// Preparing is true from before the window until it ends, so checkers stay off
+// until the configured start time plus the preparation length.
+func (s *Store) Preparing() bool {
+	end := s.ADPrepEnd()
+	return end != nil && time.Now().Before(*end)
+}
+
+func (s *Store) PrepSecondsLeft() int {
+	end := s.ADPrepEnd()
+	if end == nil {
+		return 0
+	}
+	left := time.Until(*end)
+	if left <= 0 {
+		return 0
+	}
+	return int((left + time.Second - 1) / time.Second)
+}
+
 func (s *Store) IsTeams() bool {
 	return s.UserMode() == models.ModeTeams
 }
 
+// Timezone is the single clock for every participant. An empty or unknown
+// value means UTC.
+func (s *Store) Timezone() string {
+	z := strings.TrimSpace(s.Get("timezone"))
+	if z == "" {
+		return "UTC"
+	}
+	if _, err := time.LoadLocation(z); err != nil {
+		return "UTC"
+	}
+	return z
+}
+
+func (s *Store) Location() *time.Location {
+	loc, err := time.LoadLocation(s.Timezone())
+	if err != nil {
+		return time.UTC
+	}
+	return loc
+}
+
 func (s *Store) ParseTime(key string) *time.Time {
-	v := s.Get(key)
+	return parseClock(s.Get(key), s.Location())
+}
+
+// parseClock reads an absolute RFC3339 instant or a wall-clock value in loc.
+func parseClock(v string, loc *time.Location) *time.Time {
+	v = strings.TrimSpace(v)
 	if v == "" {
 		return nil
 	}
-	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04", "2006-01-02 15:04:05"} {
-		if t, err := time.Parse(layout, v); err == nil {
+	if loc == nil {
+		loc = time.UTC
+	}
+	if t, err := time.Parse(time.RFC3339, v); err == nil {
+		return &t
+	}
+	for _, layout := range []string{"2006-01-02T15:04", "2006-01-02 15:04:05", "2006-01-02 15:04"} {
+		if t, err := time.ParseInLocation(layout, v, loc); err == nil {
 			return &t
 		}
 	}
 	if n, err := strconv.ParseInt(v, 10, 64); err == nil {
-		t := time.Unix(n, 0)
+		t := time.Unix(n, 0).UTC()
 		return &t
 	}
 	return nil

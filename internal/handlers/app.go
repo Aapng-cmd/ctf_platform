@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/aapng-cmd/ctf_platform/internal/config"
+	"github.com/aapng-cmd/ctf_platform/internal/flags"
 	"github.com/aapng-cmd/ctf_platform/internal/middleware"
 	"github.com/aapng-cmd/ctf_platform/internal/models"
 	"github.com/aapng-cmd/ctf_platform/internal/store"
@@ -21,6 +22,7 @@ import (
 type App struct {
 	DB        *gorm.DB
 	Store     *store.Store
+	Flags     flags.Store
 	Cfg       config.Config
 	Limiter   *webutil.RateLimiter
 	ADLimiter *webutil.RateLimiter
@@ -49,14 +51,25 @@ func (a *App) LoadTemplates() error {
 		"cfg": func(key string) string {
 			return a.Store.Get(key)
 		},
-		"ctfName":    a.Store.CTFName,
-		"userMode":   a.Store.UserMode,
-		"isTeams":    a.Store.IsTeams,
-		"formatTime": func(t time.Time) string { return t.Format("2006-01-02 15:04:05") },
-		"formatDate": func(t time.Time) string { return t.Format("02.01.2006 15:04") },
-		"add":        func(a, b int) int { return a + b },
-		"sub":        func(a, b int) int { return a - b },
-		"mul":        func(a, b int) int { return a * b },
+		"ctfName":  a.Store.CTFName,
+		"userMode": a.Store.UserMode,
+		"isTeams":  a.Store.IsTeams,
+		"formatTime": func(t time.Time) string {
+			if t.IsZero() {
+				return ""
+			}
+			return t.In(a.Store.Location()).Format("2006-01-02 15:04:05")
+		},
+		"formatDate": func(t time.Time) string {
+			if t.IsZero() {
+				return ""
+			}
+			return t.In(a.Store.Location()).Format("02.01.2006 15:04")
+		},
+		"timezone": a.Store.Timezone,
+		"add":      func(a, b int) int { return a + b },
+		"sub":      func(a, b int) int { return a - b },
+		"mul":      func(a, b int) int { return a * b },
 		"seq": func(n int) []int {
 			s := make([]int, n)
 			for i := range s {

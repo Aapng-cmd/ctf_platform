@@ -53,12 +53,9 @@ func TestADDashboardScoring(t *testing.T) {
 		c.Date = now
 		db.Create(&c)
 	}
-	fl := models.ADFlag{RoundID: r1.ID, ServiceID: svc.ID, TeamID: alpha.ID, Flag: "FLAG{a}", Issued: now, Expires: now.Add(time.Minute), PutStatus: models.CheckOK}
-	db.Create(&fl)
-	db.Create(&models.ADSteal{FlagID: fl.ID, AttackerTeamID: bravo.ID, VictimTeamID: alpha.ID, ServiceID: svc.ID, RoundID: r1.ID, Points: svc.AttackReward, Date: now})
-	db.Create(&models.ADFlag{RoundID: r1.ID, ServiceID: svc.ID, TeamID: bravo.ID, Flag: "FLAG{b}", Issued: now, Expires: now, PutStatus: models.CheckOK, Settled: true, Defended: true})
+	db.Create(&models.ADSteal{FlagID: 1, AttackerTeamID: bravo.ID, VictimTeamID: alpha.ID, ServiceID: svc.ID, RoundID: r1.ID, Points: svc.AttackReward, Date: now})
 
-	board := ADDashboard(db, false)
+	board := ADDashboard(db, map[[2]uint]int{{bravo.ID, svc.ID}: 1}, false)
 	if len(board.Services) != 1 || len(board.Teams) != 3 {
 		t.Fatalf("board = %+v", board)
 	}
@@ -108,7 +105,7 @@ func TestADDownPenaltyScalesWithOpponents(t *testing.T) {
 	r := models.ADRound{Number: 1, Started: now}
 	db.Create(&r)
 	db.Create(&models.ADCheck{RoundID: r.ID, ServiceID: svc.ID, TeamID: down.ID, Status: models.CheckMumble, Date: now})
-	for _, st := range ADScoreboard(db, false) {
+	for _, st := range ADScoreboard(db, nil, false) {
 		if st.Name != "down" {
 			continue
 		}

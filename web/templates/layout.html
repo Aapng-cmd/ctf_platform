@@ -4,6 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="ctf-timezone" content="{{timezone}}">
   <title>{{if .Title}}{{.Title}} | {{end}}{{.CTFName}}</title>
   <style>html.i18n-wait body{visibility:hidden}</style>
   <script>
@@ -45,6 +46,7 @@
       </ul>
       <ul class="navbar-nav ms-auto">
         <li class="nav-item d-flex align-items-center">
+          <span class="navbar-text small me-2" title="Timezone" data-i18n-title="config.timezone">{{timezone}}</span>
           <div class="lang-switch" role="group" aria-label="Language" data-i18n-aria="Language">
             <button type="button" data-lang="en">EN</button>
             <button type="button" data-lang="ru">RU</button>
@@ -125,10 +127,10 @@
     </div>
   </div>
 </dialog>
-<script src="/static/js/i18n.js?v=13"></script>
+<script src="/static/js/i18n.js?v=15"></script>
 <script src="/static/vendor/bootstrap/bootstrap.bundle.min.js"></script>
-<script>window.CSRF = {{printf "%q" .CSRF}};</script>
-<script src="/static/js/app.js?v=8"></script>
+<script>window.CSRF = {{.CSRF}};</script>
+<script src="/static/js/app.js?v=9"></script>
 {{if .PageScript}}<script src="{{.PageScript}}"></script>{{end}}
 </body>
 </html>

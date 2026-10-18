@@ -6,7 +6,7 @@
   const tr = function (msg) { return window.tr ? window.tr(msg) : msg; };
   const roundEl = document.getElementById("atkRound");
   const leftEl = document.getElementById("atkLeft");
-  let state = { paused: false, during: true };
+  let state = { paused: false, during: true, preparing: false };
   let deadline = Date.now() + (parseInt(page.dataset.left, 10) || 0) * 1000;
 
   function esc(s) {
@@ -16,6 +16,12 @@
   }
 
   function tickTimer() {
+    if (state.preparing) {
+      roundEl.textContent = "—";
+      const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      leftEl.textContent = T("dash.prepLeft").replace("{n}", left);
+      return;
+    }
     if (state.paused) { leftEl.textContent = T("dash.paused"); return; }
     if (!state.during) { leftEl.textContent = T("dash.stopped"); return; }
     const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
@@ -36,8 +42,11 @@
       const body = await res.json();
       if (!body || !body.success) return;
       const d = body.data;
-      state = { paused: d.paused, during: d.during };
-      if (d.round) {
+      state = { paused: d.paused, during: d.during, preparing: !!d.preparing };
+      if (d.preparing) {
+        roundEl.textContent = "—";
+        deadline = Date.now() + (d.prep_seconds_left || 0) * 1000;
+      } else if (d.round) {
         roundEl.textContent = d.round.number || "—";
         deadline = Date.now() + (d.round.seconds_left || 0) * 1000;
       }
@@ -67,7 +76,7 @@
     try {
       const res = await fetch("/api/v1/ad/flags", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json", "CSRF-Token": window.CSRF || "" },
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ submission: submission })
       });
       const json = await res.json();

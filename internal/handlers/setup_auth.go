@@ -48,6 +48,12 @@ func (a *App) SetupPOST(c *gin.Context) {
 	if mode != models.ModeTeams {
 		mode = models.ModeUsers
 	}
+	loc, zone, zerr := loadZone(c.PostForm("timezone"))
+	if zerr != nil {
+		a.flash(c, "danger", "Unknown timezone")
+		c.Redirect(http.StatusFound, "/setup")
+		return
+	}
 	hash, err := webutil.HashPassword(adminPass)
 	if err != nil {
 		a.flash(c, "danger", "Could not hash password")
@@ -67,17 +73,22 @@ func (a *App) SetupPOST(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/setup")
 		return
 	}
-	index := models.Page{
-		Title:   name,
-		Route:   "index",
-		Content: defaultIndex(name, desc),
+	index := models.Page{Route: "index"}
+	content := defaultIndex(name, desc)
+	if err := a.DB.Where(&models.Page{Route: "index"}).First(&index).Error; err != nil {
+		index = models.Page{Title: name, Route: "index", Content: content}
+		_ = a.DB.Create(&index).Error
+	} else {
+		index.Title = name
+		index.Content = content
+		_ = a.DB.Save(&index).Error
 	}
-	_ = a.DB.Create(&index).Error
 	_ = a.Store.SetMany(map[string]string{
 		"ctf_name":                name,
 		"ctf_description":         desc,
 		"user_mode":               mode,
 		"game_mode":               game,
+		"timezone":                zone,
 		"ad_paused":               "true",
 		"ad_round_seconds":        "60",
 		"ad_flag_lifetime_rounds": "3",
@@ -87,8 +98,8 @@ func (a *App) SetupPOST(c *gin.Context) {
 		"score_visibility":        models.VisibilityPublic,
 		"account_visibility":      models.VisibilityPublic,
 		"registration_visibility": models.VisibilityPublic,
-		"start":                   c.PostForm("start"),
-		"end":                     c.PostForm("end"),
+		"start":                   clockValue(c.PostForm("start"), loc),
+		"end":                     clockValue(c.PostForm("end"), loc),
 		"verify_emails":           "false",
 		"max_team_size":           "0",
 		"theme":                   "core",
