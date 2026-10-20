@@ -161,6 +161,17 @@ func (s *Store) ADFlagPrefix() string {
 	return s.GetDefault("ad_flag_prefix", "FLAG{")
 }
 
+func (s *Store) ADRewards() models.ADRewards {
+	base := models.DefaultADRewards()
+	return models.ADRewards{
+		Attack:  s.Int("ad_attack_reward", base.Attack),
+		Defense: s.Int("ad_defense_reward", base.Defense),
+		Lost:    s.Int("ad_lost_penalty", base.Lost),
+		SLA:     s.Int("ad_sla_reward", base.SLA),
+		Down:    s.Int("ad_down_penalty", base.Down),
+	}
+}
+
 func (s *Store) ADPrepMinutes() int {
 	n := s.Int("ad_prep_minutes", 0)
 	if n < 0 {

@@ -1,5 +1,13 @@
 (function () {
   "use strict";
+  if (window.__adAttack) {
+    window.__adAttack.forEach(clearInterval);
+    window.__adAttack = null;
+  }
+  if (window.__adAttackLang) {
+    document.removeEventListener("ctf:lang", window.__adAttackLang);
+    window.__adAttackLang = null;
+  }
   const page = document.getElementById("attack-page");
   if (!page) return;
   const T = function (key) { return window.t ? window.t(key) : key; };
@@ -99,11 +107,9 @@
     }
   });
 
-  document.addEventListener("ctf:lang", function () {
-    tickTimer();
-  });
+  window.__adAttackLang = function () { tickTimer(); };
+  document.addEventListener("ctf:lang", window.__adAttackLang);
   tickTimer();
-  setInterval(tickTimer, 250);
-  setInterval(poll, 3000);
+  window.__adAttack = [setInterval(tickTimer, 250), setInterval(poll, 3000)];
   poll();
 })();

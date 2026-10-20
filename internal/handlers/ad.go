@@ -63,19 +63,21 @@ func (a *App) AttackPage(c *gin.Context) {
 	}
 	captain := u.IsAdmin()
 	token := ""
+	host := ""
 	if u.TeamID != nil {
 		var team models.Team
 		if a.DB.First(&team, *u.TeamID).Error == nil {
 			captain = captain || team.CaptainID != nil && *team.CaptainID == u.ID
 			token = a.teamADToken(&team)
+			host = team.ADHost
 		}
 	}
 	a.HTML(c, http.StatusOK, "attack.html", gin.H{
 		"Title": "Attack-Defense", "Round": round, "SecondsLeft": a.roundSecondsLeft(round),
 		"Instances": insts, "Mine": mine, "Steals": steals, "Checks": checkMap, "ServiceNames": serviceNames,
-		"Captain": captain, "Token": token, "FlagHint": a.flagHint(),
+		"Captain": captain, "Token": token, "Host": host, "FlagHint": a.flagHint(),
 		"SubmitURL":  requestBase(c) + "/api/v1/ad/flags",
-		"PageScript": "/static/js/attack.js?v=3", "Flashes": a.flashes(c),
+		"PageScript": "/static/js/attack.js?v=4", "Flashes": a.flashes(c),
 	})
 }
 
@@ -297,7 +299,7 @@ func (a *App) submitADFlag(teamID, userID uint, flag string) adFlagResult {
 	}
 	steal := models.ADSteal{
 		FlagID: fl.ID, AttackerTeamID: teamID, VictimTeamID: fl.TeamID,
-		ServiceID: fl.ServiceID, RoundID: fl.RoundID, Points: svc.AttackReward,
+		ServiceID: fl.ServiceID, RoundID: fl.RoundID, Points: a.Store.ADRewards().Attack,
 		UserID: userID, Date: time.Now(),
 	}
 	if a.DB.Create(&steal).Error != nil {
@@ -305,7 +307,7 @@ func (a *App) submitADFlag(teamID, userID uint, flag string) adFlagResult {
 		return res
 	}
 	a.dropADCache()
-	res.Status, res.Message, res.Points = "correct", "Flag accepted", svc.AttackReward
+	res.Status, res.Message, res.Points = "correct", "Flag accepted", a.Store.ADRewards().Attack
 	return res
 }
 
@@ -325,19 +327,10 @@ func (a *App) AttackHostsPOST(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/attack")
 		return
 	}
+	host := strings.TrimSpace(c.PostForm("host"))
+	a.DB.Model(&team).Update("ad_host", host)
+	a.DB.Model(&models.ADInstance{}).Where("team_id = ?", team.ID).Update("host", host)
 	_ = ad.EnsureInstances(a.DB)
-	var insts []models.ADInstance
-	a.DB.Where("team_id = ?", team.ID).Find(&insts)
-	for _, inst := range insts {
-		host := strings.TrimSpace(c.PostForm("host_" + strconv.Itoa(int(inst.ID))))
-		portStr := c.PostForm("port_" + strconv.Itoa(int(inst.ID)))
-		port, _ := strconv.Atoi(portStr)
-		updates := map[string]any{"host": host}
-		if port > 0 {
-			updates["port"] = port
-		}
-		a.DB.Model(&inst).Updates(updates)
-	}
 	a.flash(c, "success", "Vulnbox addresses saved")
 	c.Redirect(http.StatusFound, "/attack")
 }
@@ -374,7 +367,7 @@ func (a *App) adBoard(admin bool) scoring.ADBoard {
 		if a.Flags != nil {
 			defended = a.Flags.Defended()
 		}
-		a.adCache.board[i] = scoring.ADDashboard(a.DB, defended, admin)
+		a.adCache.board[i] = scoring.ADDashboard(a.DB, defended, admin, a.Store.ADRewards())
 		a.adCache.at[i] = time.Now()
 	}
 	return a.adCache.board[i]
@@ -407,7 +400,7 @@ func (a *App) DashboardPage(c *gin.Context) {
 	}
 	a.HTML(c, http.StatusOK, "dashboard.html", gin.H{
 		"Title": "Dashboard", "Board": a.dashboardData(u),
-		"PageScript": "/static/js/dashboard.js?v=4", "Flashes": a.flashes(c),
+		"PageScript": "/static/js/dashboard.js?v=5", "Flashes": a.flashes(c),
 	})
 }
 
@@ -474,7 +467,9 @@ func (a *App) APIADStatus(c *gin.Context) {
 func (a *App) AdminAD(c *gin.Context) {
 	_ = ad.EnsureInstances(a.DB)
 	var services []models.ADService
-	a.DB.Order("id").Find(&services)
+	a.DB.Preload("Checker").Order("id").Find(&services)
+	var checkers []models.ADChecker
+	a.DB.Order("id").Find(&checkers)
 	var teams []models.Team
 	a.DB.Order("name").Find(&teams)
 	var insts []models.ADInstance
@@ -520,9 +515,9 @@ func (a *App) AdminAD(c *gin.Context) {
 		serviceNames[s.ID] = s.Name
 	}
 	a.HTML(c, http.StatusOK, "admin_ad.html", gin.H{
-		"Title": "Attack-Defense", "Admin": true, "Services": services, "Teams": teams,
+		"Title": "Attack-Defense", "Admin": true, "Services": services, "Checkers": checkers, "Teams": teams,
 		"Instances": insts, "Hosts": rows, "Round": round, "Checks": checks, "Steals": steals,
-		"TeamNames": teamNames, "ServiceNames": serviceNames,
+		"TeamNames": teamNames, "ServiceNames": serviceNames, "Rewards": a.Store.ADRewards(),
 		"Paused": a.Store.ADPaused(), "RoundSeconds": a.Store.ADRoundSeconds(),
 		"FlagLife": a.Store.ADFlagLifetime(), "FlagPrefix": a.Store.ADFlagPrefix(),
 		"PrepStart": clockInput(a.Store.ADPrepStart(), a.Store.Location()), "PrepMinutes": a.Store.ADPrepMinutes(),
@@ -535,6 +530,7 @@ func (a *App) AdminADConfigPOST(c *gin.Context) {
 	if c.PostForm("ad_paused") == "on" {
 		paused = "true"
 	}
+	base := models.DefaultADRewards()
 	_ = a.Store.SetMany(map[string]string{
 		"ad_paused":               paused,
 		"ad_round_seconds":        c.PostForm("ad_round_seconds"),
@@ -542,7 +538,13 @@ func (a *App) AdminADConfigPOST(c *gin.Context) {
 		"ad_flag_prefix":          c.PostForm("ad_flag_prefix"),
 		"ad_prep_start":           clockValue(c.PostForm("ad_prep_start"), a.Store.Location()),
 		"ad_prep_minutes":         c.PostForm("ad_prep_minutes"),
+		"ad_attack_reward":        strconv.Itoa(formInt(c, "ad_attack_reward", base.Attack)),
+		"ad_defense_reward":       strconv.Itoa(formInt(c, "ad_defense_reward", base.Defense)),
+		"ad_lost_penalty":         strconv.Itoa(formInt(c, "ad_lost_penalty", base.Lost)),
+		"ad_sla_reward":           strconv.Itoa(formInt(c, "ad_sla_reward", base.SLA)),
+		"ad_down_penalty":         strconv.Itoa(formInt(c, "ad_down_penalty", base.Down)),
 	})
+	a.dropADCache()
 	a.flash(c, "success", "Attack-Defense settings saved")
 	c.Redirect(http.StatusFound, "/admin/ad")
 }
@@ -602,36 +604,47 @@ func formInt(c *gin.Context, key string, def int) int {
 }
 
 func (a *App) AdminADServicePOST(c *gin.Context) {
-	port, _ := strconv.Atoi(c.PostForm("port"))
-	ar := formInt(c, "attack_reward", models.ADDefaultAttackReward)
-	sr := formInt(c, "sla_reward", models.ADDefaultSLAReward)
-	dp := formInt(c, "defense_penalty", models.ADDefaultDefensePenalty)
-	dr := formInt(c, "defense_reward", models.ADDefaultDefenseReward)
-	down := formInt(c, "down_penalty", models.ADDefaultDownPenalty)
-	svc := models.ADService{
-		Name: strings.TrimSpace(c.PostForm("name")), Description: c.PostForm("description"),
-		Port: port, CheckerURL: strings.TrimSpace(c.PostForm("checker_url")),
-		AttackReward: ar, SLAReward: sr, DefensePenalty: dp, DefenseReward: dr, DownPenalty: down, Active: c.PostForm("active") != "off",
-	}
-	if svc.Name == "" {
-		a.flash(c, "danger", "Service name is required")
+	name := strings.TrimSpace(c.PostForm("name"))
+	port, _ := strconv.Atoi(strings.TrimSpace(c.PostForm("port")))
+	checkerID, _ := strconv.Atoi(strings.TrimSpace(c.PostForm("checker_id")))
+	if name == "" || port <= 0 {
+		a.flash(c, "danger", "Service name and port are required")
 		c.Redirect(http.StatusFound, "/admin/ad")
 		return
 	}
-	if id, _ := strconv.Atoi(c.PostForm("id")); id > 0 {
-		svc.ID = uint(id)
+	var ch models.ADChecker
+	if checkerID <= 0 || a.DB.First(&ch, checkerID).Error != nil {
+		a.flash(c, "danger", "Choose a running checker")
+		c.Redirect(http.StatusFound, "/admin/ad")
+		return
+	}
+	var existing models.ADService
+	id, _ := strconv.Atoi(c.PostForm("id"))
+	if id > 0 && a.DB.First(&existing, id).Error != nil {
+		a.flash(c, "danger", "Service not found")
+		c.Redirect(http.StatusFound, "/admin/ad")
+		return
+	}
+	same := id > 0 && existing.CheckerID != nil && *existing.CheckerID == ch.ID
+	if ch.DeployStatus != "running" && !same {
+		a.flash(c, "danger", "Choose a running checker")
+		c.Redirect(http.StatusFound, "/admin/ad")
+		return
+	}
+	cid := ch.ID
+	if id > 0 {
 		a.DB.Model(&models.ADService{}).Where("id = ?", id).Updates(map[string]any{
-			"name": svc.Name, "description": svc.Description, "port": svc.Port,
-			"checker_url": svc.CheckerURL, "attack_reward": svc.AttackReward,
-			"sla_reward": svc.SLAReward, "defense_penalty": svc.DefensePenalty, "defense_reward": svc.DefenseReward,
-			"down_penalty": svc.DownPenalty, "active": c.PostForm("active") == "on",
+			"name": name, "port": port, "checker_id": cid, "checker_url": ch.URL, "active": true,
 		})
+		a.DB.Model(&models.ADInstance{}).Where("service_id = ?", id).Update("port", port)
 		a.flash(c, "success", "Service updated")
 	} else {
-		a.DB.Create(&svc)
-		a.DB.Model(&svc).Updates(map[string]any{
-			"attack_reward": ar, "sla_reward": sr, "defense_penalty": dp, "defense_reward": dr, "down_penalty": down,
-		})
+		svc := models.ADService{Name: name, Port: port, CheckerID: &cid, CheckerURL: ch.URL, Active: true}
+		if err := a.DB.Create(&svc).Error; err != nil {
+			a.flash(c, "danger", "Could not save service: "+err.Error())
+			c.Redirect(http.StatusFound, "/admin/ad")
+			return
+		}
 		a.flash(c, "success", "Service created")
 	}
 	_ = ad.EnsureInstances(a.DB)
@@ -662,7 +675,11 @@ func (a *App) AdminADServiceDelete(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	var svc models.ADService
 	if a.DB.First(&svc, id).Error == nil && svc.ComposeDir != "" && dirExists(svc.ComposeDir) {
-		_, _ = tasks.DownVolumes(svc.ComposeDir)
+		var checkers int64
+		a.DB.Model(&models.ADChecker{}).Where("compose_dir = ?", svc.ComposeDir).Count(&checkers)
+		if checkers == 0 {
+			_, _ = tasks.DownVolumes(svc.ComposeDir)
+		}
 	}
 	a.DB.Where("service_id = ?", id).Delete(&models.ADInstance{})
 	if a.Flags != nil {
@@ -676,19 +693,18 @@ func (a *App) AdminADServiceDelete(c *gin.Context) {
 }
 
 func (a *App) AdminADHostsPOST(c *gin.Context) {
-	_ = ad.EnsureInstances(a.DB)
-	var insts []models.ADInstance
-	a.DB.Find(&insts)
-	for _, inst := range insts {
-		key := strconv.Itoa(int(inst.ID))
-		host := strings.TrimSpace(c.PostForm("host_" + key))
-		port, _ := strconv.Atoi(c.PostForm("port_" + key))
-		upd := map[string]any{"host": host}
-		if port > 0 {
-			upd["port"] = port
+	var teams []models.Team
+	a.DB.Where("banned = ?", false).Find(&teams)
+	for _, team := range teams {
+		key := "host_" + strconv.Itoa(int(team.ID))
+		if _, ok := c.GetPostForm(key); !ok {
+			continue
 		}
-		a.DB.Model(&inst).Updates(upd)
+		host := strings.TrimSpace(c.PostForm(key))
+		a.DB.Model(&team).Update("ad_host", host)
+		a.DB.Model(&models.ADInstance{}).Where("team_id = ?", team.ID).Update("host", host)
 	}
+	_ = ad.EnsureInstances(a.DB)
 	a.flash(c, "success", "Team hosts saved")
 	c.Redirect(http.StatusFound, "/admin/ad")
 }

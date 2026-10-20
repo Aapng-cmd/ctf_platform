@@ -82,6 +82,7 @@
       "attack.copy": "Copy",
       "attack.newToken": "New token",
       "attack.vulnbox": "Your vulnbox",
+      "attack.oneHost": "All of your services use this host. The port belongs to the service and is the same for every team.",
       "attack.save": "Save hosts",
       "attack.network": "Network",
       "attack.service": "Service",
@@ -105,8 +106,17 @@
       "admin.redeploy": "Redeploy",
       "admin.stop": "Stop",
       "admin.adTitle": "Attack-Defense",
-      "admin.adHint": "Upload a task archive. The service name, port, and checker are read from the zip. Problems show up in the deploy log.",
-      "admin.adUpload": "Upload AD archive",
+      "admin.adHint": "Start a checker, create a service with that checker, a name and a port, then set each team's host. The service is placed on every host at that port. One checker serves every team; each team gets its own flags.",
+      "admin.adUpload": "Checker archive",
+      "admin.checkerHint": "The zip contains only the checker. The vulnerable service is not started.",
+      "admin.startChecker": "Start checker",
+      "admin.checkers": "Checkers",
+      "admin.noCheckers": "No checkers yet.",
+      "admin.adConfig": "Settings",
+      "admin.chooseChecker": "Choose a running checker",
+      "admin.serviceHint": "Name, port and a checker that is already running. The same port is used on every team's host. Name, port and checker can be changed after the service exists.",
+      "admin.noServices": "No services yet.",
+      "admin.endpoints": "Where the service is placed",
       "admin.port": "Port",
       "admin.checker": "Checker",
       "admin.status": "Status",
@@ -122,7 +132,7 @@
       "admin.prepMinutes": "Preparation (minutes)",
       "admin.services": "Services",
       "admin.hosts": "Team hosts",
-      "admin.hostsHint": "Upload only the checker. Then set the host and port of each participant machine. The checker sends flags there and checks them.",
+      "admin.hostsHint": "One address per team. Every service is placed on that address at the service's own port. Teams with the same service share the checker and the port, and differ by host.",
       "admin.hostsEmpty": "No teams yet. The checker has nowhere to send flags.",
       "admin.pausedFlags": "The engine is paused, so the checker is not sending flags.",
       "admin.put": "Flag put",
@@ -140,7 +150,7 @@
       "admin.steals": "Recent steals",
       "admin.noChecks": "No checks in this round yet.",
       "admin.noSteals": "No flags stolen yet.",
-      "admin.scoringHint": "Stolen flag: the attacker gets Attack, the victim loses Lost flag. A flag that lived its whole lifetime on a working service and was not stolen gives Defense. Every OK round gives SLA. Every round a service is DOWN, MUMBLE, CORRUPT or has no host costs Down × number of opponents, so a dead service costs more than being robbed by every team.",
+      "admin.scoringHint": "Stolen flag: the attacker gets Attack, the victim loses Lost flag. A flag that lived its whole lifetime on a working service and was not stolen gives Defense. Every OK round gives SLA. Every round a service is DOWN, MUMBLE, CORRUPT or has no host costs Down × number of opponents, so a dead service costs more than being robbed by every team. These points are the same for every service.",
       "admin.checks": "This round checks",
       "admin.currentRound": "Current round",
       "pts.attack": "Attack",
@@ -179,6 +189,7 @@
       "dialog.cancel": "Cancel",
       "dialog.ok": "Confirm",
       "confirm.deleteService": "Delete this service?",
+      "confirm.deleteChecker": "Delete this checker?",
       "confirm.deleteUser": "Delete this user?",
       "confirm.deleteTeam": "Delete this team?",
       "confirm.deletePage": "Delete this page?",
@@ -275,6 +286,7 @@
       "attack.copy": "Копировать",
       "attack.newToken": "Новый токен",
       "attack.vulnbox": "Ваша машина",
+      "attack.oneHost": "Все ваши сервисы используют этот хост. Порт задаётся у сервиса и одинаков для всех команд.",
       "attack.save": "Сохранить хосты",
       "attack.network": "Сеть",
       "attack.service": "Сервис",
@@ -298,8 +310,17 @@
       "admin.redeploy": "Перезапустить",
       "admin.stop": "Остановить",
       "admin.adTitle": "Атака-защита",
-      "admin.adHint": "Загрузите архив задания. Имя, порт и чекер берутся из архива. Ошибки видны в логе деплоя.",
-      "admin.adUpload": "Загрузить архив AD",
+      "admin.adHint": "Сначала запускается чекер, затем сервис с этим чекером, именем и портом, затем хост каждой команды. Сервис ставится на каждый хост на этом порту. Один чекер обслуживает все команды, флаги у команд разные.",
+      "admin.adUpload": "Архив чекера",
+      "admin.checkerHint": "В архиве только чекер. Уязвимый сервис не запускается.",
+      "admin.startChecker": "Запустить чекер",
+      "admin.checkers": "Чекеры",
+      "admin.noCheckers": "Чекеров ещё нет.",
+      "admin.adConfig": "Настройки",
+      "admin.chooseChecker": "Выберите запущенный чекер",
+      "admin.serviceHint": "Имя, порт и уже запущенный чекер. На хостах всех команд сервис слушает один и тот же порт. Имя, порт и чекер можно изменить после создания.",
+      "admin.noServices": "Сервисов ещё нет.",
+      "admin.endpoints": "Куда поставлен сервис",
       "admin.port": "Порт",
       "admin.checker": "Чекер",
       "admin.status": "Статус",
@@ -315,7 +336,7 @@
       "admin.prepMinutes": "Подготовка (минуты)",
       "admin.services": "Сервисы",
       "admin.hosts": "Хосты команд",
-      "admin.hostsHint": "Загружайте только чекер. Затем укажите хост и порт машины каждого участника. Чекер отправит туда флаги и проверит их.",
+      "admin.hostsHint": "Один адрес на команду. Каждый сервис ставится на этот адрес на своём порту. У одинаковых сервисов общий чекер и общий порт, хосты разные.",
       "admin.hostsEmpty": "Команд ещё нет. Чекеру некуда отправлять флаги.",
       "admin.pausedFlags": "Движок на паузе, поэтому чекер не отправляет флаги.",
       "admin.put": "Кладка флага",
@@ -333,7 +354,7 @@
       "admin.steals": "Последние кражи флагов",
       "admin.noChecks": "В этом раунде проверок ещё не было.",
       "admin.noSteals": "Флаги ещё не крали.",
-      "admin.scoringHint": "Украденный флаг: атакующий получает «Атака», жертва теряет «Потеря флага». Флаг, который прожил весь срок на работающем сервисе и не был украден, даёт «Защита». Каждый раунд со статусом OK даёт SLA. Каждый раунд, когда сервис в DOWN, MUMBLE, CORRUPT или без хоста, стоит «Простой» × число соперников, поэтому упавший сервис обходится дороже, чем если флаг украдут все команды.",
+      "admin.scoringHint": "Украденный флаг: атакующий получает «Атака», жертва теряет «Потеря флага». Флаг, который прожил весь срок на работающем сервисе и не был украден, даёт «Защита». Каждый раунд со статусом OK даёт SLA. Каждый раунд, когда сервис в DOWN, MUMBLE, CORRUPT или без хоста, стоит «Простой» × число соперников, поэтому упавший сервис обходится дороже, чем если флаг украдут все команды. Эти очки общие для всех сервисов.",
       "admin.checks": "Проверки раунда",
       "admin.currentRound": "Текущий раунд",
       "pts.attack": "Атака",
@@ -372,6 +393,7 @@
       "dialog.cancel": "Отмена",
       "dialog.ok": "Подтвердить",
       "confirm.deleteService": "Удалить этот сервис?",
+      "confirm.deleteChecker": "Удалить этот чекер?",
       "confirm.deleteUser": "Удалить этого пользователя?",
       "confirm.deleteTeam": "Удалить эту команду?",
       "confirm.deletePage": "Удалить эту страницу?",
@@ -607,6 +629,13 @@
     "Service name is required": "Нужно имя сервиса",
     "Service not found": "Сервис не найден",
     "Service updated": "Сервис сохранён",
+    "Choose a running checker": "Выберите запущенный чекер",
+    "Service name and port are required": "Нужны имя сервиса и порт",
+    "Checker imported. Docker deploy started.": "Чекер загружен. Запуск Docker начат.",
+    "Could not save checker: ": "Не удалось сохранить чекер: ",
+    "The archive has no HTTP checker. The vulnerable service is not started.": "В архиве нет HTTP-чекера. Уязвимый сервис не запускается.",
+    "Checker stopped": "Чекер остановлен",
+    "Checker deleted": "Чекер удалён",
     "Solve awarded": "Решение засчитано",
     "Solves, submissions, unlocks, awards and Attack-Defense rounds were wiped": "Решения, попытки, подсказки, награды и раунды атаки-защиты удалены",
     "Team deleted": "Команда удалена",
@@ -706,6 +735,17 @@
     }
   }
 
+  function applyTimezones() {
+    const ru = lang() === "ru";
+    document.querySelectorAll(".tz-select option, .tz-current").forEach(function (el) {
+      const en = el.getAttribute("data-city-en");
+      if (!en) return;
+      const city = ru ? (el.getAttribute("data-city-ru") || en) : en;
+      const off = el.getAttribute("data-offset") || "";
+      el.textContent = off ? city + " " + off : city;
+    });
+  }
+
   function applyCountries() {
     document.querySelectorAll('select[name="country"] option[value], [data-country]').forEach(function (el) {
       const code = el.getAttribute("data-country") || el.value;
@@ -765,6 +805,7 @@
         el.textContent = tr(el.dataset.src);
       });
       applyCountries();
+      applyTimezones();
       document.querySelectorAll(".lang-switch button").forEach(function (btn) {
         const on = btn.getAttribute("data-lang") === lang();
         btn.classList.toggle("active", on);
@@ -777,6 +818,7 @@
   }
 
   window.t = t;
+  window.ctfApply = apply;
   window.tr = tr;
   window.setLang = function (code) {
     try { localStorage.setItem("ctf_lang", code === "en" ? "en" : "ru"); } catch (e) {}

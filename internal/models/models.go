@@ -55,6 +55,25 @@ const (
 	ADNoHostMessage = "team host is not set"
 )
 
+// ADRewards is the event-wide Attack-Defense score. It is not stored per service.
+type ADRewards struct {
+	Attack  int `json:"attack"`
+	Defense int `json:"defense"`
+	Lost    int `json:"lost"`
+	SLA     int `json:"sla"`
+	Down    int `json:"down"`
+}
+
+func DefaultADRewards() ADRewards {
+	return ADRewards{
+		Attack:  ADDefaultAttackReward,
+		Defense: ADDefaultDefenseReward,
+		Lost:    ADDefaultDefensePenalty,
+		SLA:     ADDefaultSLAReward,
+		Down:    ADDefaultDownPenalty,
+	}
+}
+
 type User struct {
 	ID          uint      `gorm:"primaryKey" json:"id"`
 	Email       string    `gorm:"size:128;uniqueIndex;not null" json:"email"`
@@ -91,6 +110,8 @@ type Team struct {
 	Created     time.Time `json:"created"`
 	// ADToken authenticates Attack-Defense flag submission from scripts (X-Team-Token).
 	ADToken string `gorm:"size:64;index" json:"-"`
+	// ADHost is the team's vulnbox. Every service of that team uses this address and the service port.
+	ADHost  string `gorm:"size:255" json:"ad_host"`
 	Members []User `gorm:"foreignKey:TeamID" json:"members,omitempty"`
 }
 
@@ -269,22 +290,37 @@ type Tracking struct {
 
 func (Tracking) TableName() string { return "tracking" }
 
-type ADService struct {
+// ADChecker is a running checker process. One checker serves the same service on every team.
+type ADChecker struct {
 	ID             uint   `gorm:"primaryKey" json:"id"`
-	Name           string `gorm:"size:80;not null" json:"name"`
-	Description    string `gorm:"type:text" json:"description"`
-	Port           int    `json:"port"`
-	CheckerURL     string `gorm:"size:512" json:"checker_url"`
-	AttackReward   int    `gorm:"default:10" json:"attack_reward"`
-	SLAReward      int    `gorm:"default:2" json:"sla_reward"`
-	DefensePenalty int    `gorm:"default:10" json:"defense_penalty"`
-	DefenseReward  int    `gorm:"default:5" json:"defense_reward"`
-	DownPenalty    int    `gorm:"default:20" json:"down_penalty"`
-	Active         bool   `gorm:"default:true" json:"active"`
+	Name           string `gorm:"size:80;uniqueIndex;not null" json:"name"`
+	URL            string `gorm:"size:512" json:"url"`
 	ComposeDir     string `gorm:"size:512" json:"-"`
 	CheckerService string `gorm:"size:64" json:"checker_service"`
 	DeployStatus   string `gorm:"size:32" json:"deploy_status"`
 	DeployLog      string `gorm:"type:text" json:"-"`
+}
+
+func (ADChecker) TableName() string { return "ad_checkers" }
+
+type ADService struct {
+	ID             uint       `gorm:"primaryKey" json:"id"`
+	Name           string     `gorm:"size:80;not null" json:"name"`
+	Description    string     `gorm:"type:text" json:"description"`
+	Port           int        `json:"port"`
+	CheckerID      *uint      `gorm:"index" json:"checker_id"`
+	Checker        *ADChecker `gorm:"foreignKey:CheckerID" json:"checker,omitempty"`
+	CheckerURL     string     `gorm:"size:512" json:"checker_url"`
+	AttackReward   int        `gorm:"default:10" json:"attack_reward"`
+	SLAReward      int        `gorm:"default:2" json:"sla_reward"`
+	DefensePenalty int        `gorm:"default:10" json:"defense_penalty"`
+	DefenseReward  int        `gorm:"default:5" json:"defense_reward"`
+	DownPenalty    int        `gorm:"default:20" json:"down_penalty"`
+	Active         bool       `gorm:"default:true" json:"active"`
+	ComposeDir     string     `gorm:"size:512" json:"-"`
+	CheckerService string     `gorm:"size:64" json:"checker_service"`
+	DeployStatus   string     `gorm:"size:32" json:"deploy_status"`
+	DeployLog      string     `gorm:"type:text" json:"-"`
 }
 
 func (ADService) TableName() string { return "ad_services" }

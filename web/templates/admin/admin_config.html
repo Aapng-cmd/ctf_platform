@@ -27,29 +27,7 @@
     </div>
     <div class="mb-3">
       <label class="form-label" data-i18n="config.timezone">Timezone</label>
-      <input class="form-control" name="timezone" list="tz-list" value="{{index .Config "timezone"}}" required>
-      <datalist id="tz-list">
-        <option value="UTC"></option>
-        <option value="Europe/Kaliningrad"></option>
-        <option value="Europe/Moscow"></option>
-        <option value="Europe/Samara"></option>
-        <option value="Asia/Yekaterinburg"></option>
-        <option value="Asia/Omsk"></option>
-        <option value="Asia/Novosibirsk"></option>
-        <option value="Asia/Krasnoyarsk"></option>
-        <option value="Asia/Irkutsk"></option>
-        <option value="Asia/Yakutsk"></option>
-        <option value="Asia/Vladivostok"></option>
-        <option value="Asia/Kamchatka"></option>
-        <option value="Europe/London"></option>
-        <option value="Europe/Berlin"></option>
-        <option value="America/New_York"></option>
-        <option value="America/Chicago"></option>
-        <option value="America/Denver"></option>
-        <option value="America/Los_Angeles"></option>
-        <option value="Asia/Shanghai"></option>
-        <option value="Asia/Tokyo"></option>
-      </datalist>
+      {{template "tzselect" (index .Config "timezone")}}
       <div class="form-text"><span data-i18n="config.timezoneHint">Everyone sees event times in this timezone.</span> {{.ZoneNow}}</div>
     </div>
     <div class="row">

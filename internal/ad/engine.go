@@ -195,6 +195,14 @@ func (e *Engine) resolveChecker(inst *models.ADInstance) string {
 	if inst == nil {
 		return ""
 	}
+	if inst.Service.CheckerID != nil {
+		var ch models.ADChecker
+		if e.DB.First(&ch, *inst.Service.CheckerID).Error == nil {
+			if url := strings.TrimSpace(ch.URL); url != "" {
+				return url
+			}
+		}
+	}
 	if url := strings.TrimSpace(inst.Service.CheckerURL); url != "" {
 		return url
 	}
@@ -375,8 +383,17 @@ func EnsureInstances(db *gorm.DB) error {
 	db.Where("banned = ?", false).Find(&teams)
 	for _, t := range teams {
 		for _, s := range services {
-			row := models.ADInstance{TeamID: t.ID, ServiceID: s.ID, Port: s.Port}
-			_ = db.Where("team_id = ? AND service_id = ?", t.ID, s.ID).Attrs(row).FirstOrCreate(&row).Error
+			var row models.ADInstance
+			err := db.Where("team_id = ? AND service_id = ?", t.ID, s.ID).First(&row).Error
+			if err != nil {
+				_ = db.Create(&models.ADInstance{TeamID: t.ID, ServiceID: s.ID, Host: t.ADHost, Port: s.Port}).Error
+				continue
+			}
+			updates := map[string]any{"port": s.Port}
+			if t.ADHost != "" {
+				updates["host"] = t.ADHost
+			}
+			_ = db.Model(&row).Updates(updates).Error
 		}
 	}
 	return nil

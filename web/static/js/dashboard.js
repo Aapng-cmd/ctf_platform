@@ -1,5 +1,13 @@
 (function () {
   "use strict";
+  if (window.__adDash) {
+    window.__adDash.forEach(clearInterval);
+    window.__adDash = null;
+  }
+  if (window.__adDashLang) {
+    document.removeEventListener("ctf:lang", window.__adDashLang);
+    window.__adDashLang = null;
+  }
   const root = document.getElementById("ad-dashboard");
   if (!root) return;
   const boardEl = document.getElementById("adBoard");
@@ -172,7 +180,7 @@
   setDeadline();
   render();
   tickTimer();
-  setInterval(tickTimer, 250);
-  setInterval(poll, 3000);
-  document.addEventListener("ctf:lang", function () { render(); tickTimer(); });
+  window.__adDash = [setInterval(tickTimer, 250), setInterval(poll, 3000)];
+  window.__adDashLang = function () { render(); tickTimer(); };
+  document.addEventListener("ctf:lang", window.__adDashLang);
 })();

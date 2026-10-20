@@ -46,7 +46,8 @@
       </ul>
       <ul class="navbar-nav ms-auto">
         <li class="nav-item d-flex align-items-center">
-          <span class="navbar-text small me-2" title="Timezone" data-i18n-title="config.timezone">{{timezone}}</span>
+          {{$z := tzCity timezone}}
+          <span class="navbar-text small me-2 tz-current" title="Timezone" data-i18n-title="config.timezone" data-city-en="{{$z.En}}" data-city-ru="{{$z.Ru}}" data-offset="{{$z.Offset}}">{{if $z.Offset}}{{$z.En}} {{$z.Offset}}{{else}}{{$z.En}}{{end}}</span>
           <div class="lang-switch" role="group" aria-label="Language" data-i18n-aria="Language">
             <button type="button" data-lang="en">EN</button>
             <button type="button" data-lang="ru">RU</button>
@@ -112,6 +113,14 @@
 </aside>
 {{end}}
 
+{{define "tzselect"}}
+<select class="form-select tz-select" name="timezone" required>
+  {{range zoneChoices .}}
+  <option value="{{.ID}}" data-city-en="{{.En}}" data-city-ru="{{.Ru}}" data-offset="{{.Offset}}" {{if eq .ID $}}selected{{end}}>{{if .Offset}}{{.En}} {{.Offset}}{{else}}{{.En}}{{end}}</option>
+  {{end}}
+</select>
+{{end}}
+
 {{define "footer"}}
 <footer class="ctfd-footer">
   <div class="container text-center">
@@ -127,11 +136,11 @@
     </div>
   </div>
 </dialog>
-<script src="/static/js/i18n.js?v=15"></script>
+<script src="/static/js/i18n.js?v=17"></script>
 <script src="/static/vendor/bootstrap/bootstrap.bundle.min.js"></script>
 <script>window.CSRF = {{.CSRF}};</script>
-<script src="/static/js/app.js?v=9"></script>
-{{if .PageScript}}<script src="{{.PageScript}}"></script>{{end}}
+<script src="/static/js/app.js?v=10"></script>
+{{if .PageScript}}<script src="{{.PageScript}}" data-page-script="1"></script>{{end}}
 </body>
 </html>
 {{end}}

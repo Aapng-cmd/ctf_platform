@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """Create an Attack-Defense admin, three teams, and a preparation window.
 
-Also starts the bucket service once per team on its own host port and uploads
-only the checker archive. The platform does not start the vulnerable container.
+Also starts the bucket service once per team on the same port and a different
+loopback address, uploads only the checker, creates the service, and saves hosts.
+The platform does not start the vulnerable container.
 
     python3 scripts/ad_bootstrap.py
     BASE=http://127.0.0.1:8000 PREP_MINUTES=10 python3 scripts/ad_bootstrap.py
     TASK_DIR=/path/to/bucket CHECKER_ZIP=/path/to/bucket.zip BASE_PORT=18101 python3 scripts/ad_bootstrap.py
 
-CTF_TIMEZONE overrides the zone taken from /etc/localtime. CHECKER_HOST is the
-address the checker dials; the checker container uses the host network, so
-127.0.0.1 reaches the published ports.
+CTF_TIMEZONE overrides the zone taken from /etc/localtime. With the default
+CHECKER_HOST=127.0.0.1 the teams are published on 127.0.0.1, 127.0.0.2 and
+127.0.0.3 at BASE_PORT. The checker uses the host network, so those addresses
+reach the published ports.
 """
 
 import html
@@ -210,7 +212,14 @@ def create_team(user, email, user_password, team_password):
     print("team %s ready" % user)
 
 
-def start_vulnbox(team, port):
+def team_addr(index):
+    if CHECKER_HOST == "127.0.0.1":
+        return "127.0.0.%d" % (index + 1)
+    return CHECKER_HOST
+
+
+def start_vulnbox(team, index):
+    host = team_addr(index)
     handle = tempfile.NamedTemporaryFile("w", suffix=".yml", delete=False)
     handle.write(
         "services:\n"
@@ -218,12 +227,12 @@ def start_vulnbox(team, port):
         "    image: adtest-bucket\n"
         "    build: .\n"
         "    ports:\n"
-        '      - "%d:80"\n'
+        '      - "%s:%d:80"\n'
         "    volumes:\n"
         "      - silo-data:/data\n"
         "    restart: unless-stopped\n"
         "volumes:\n"
-        "  silo-data:\n" % port
+        "  silo-data:\n" % (host, BASE_PORT)
     )
     handle.close()
     cmd = [
@@ -233,7 +242,9 @@ def start_vulnbox(team, port):
         "-f", handle.name,
         "up", "-d", "--build",
     ]
-    print("starting bucket-%s on %s:%d" % (team, CHECKER_HOST, port))
+    print("starting bucket-%s on %s:%d" % (team, host, BASE_PORT))
+    # Drop the previous database. A fresh checker state cannot log into leftover accounts.
+    subprocess.run(cmd[:-3] + ["down", "-v"], text=True)
     proc = subprocess.run(cmd, text=True)
     os.unlink(handle.name)
     must(proc.returncode == 0, "docker compose failed for %s" % team)
@@ -280,7 +291,7 @@ def wait_checker(admin):
         if "/login" in url:
             sys.exit("lost admin session while waiting for the checker")
         try:
-            data = json.loads(page)["data"]["services"]
+            data = json.loads(page)["data"].get("checkers") or []
         except (json.JSONDecodeError, KeyError, TypeError):
             time.sleep(2)
             continue
@@ -298,26 +309,46 @@ def wait_checker(admin):
     sys.exit("checker did not become running (last status %s)" % last)
 
 
-def assign_hosts(admin):
+def create_service(admin):
     nonce, page = admin.nonce("/admin/ad")
+    if re.search(r'name="name" value="bucket"', page):
+        print("service bucket already exists")
+        return
     found = re.findall(
-        r'<tr>\s*<td>([^<]+)</td>\s*<td>[^<]*</td>\s*<td><input[^>]*name="host_(\d+)"',
+        r'data-checker-id="(\d+)" data-checker-name="([^"]*)" data-checker-status="([^"]*)"',
         page,
     )
+    running = [row for row in found if row[2] == "running"]
+    must(running, "no running checker on the AD page")
+    _, final, body = admin.open("/admin/ad/services", {
+        "nonce": nonce,
+        "name": "bucket",
+        "port": str(BASE_PORT),
+        "checker_id": running[-1][0],
+    })
+    must("/admin/ad" in final and 'value="bucket"' in body, "could not create service:\n" + body[:500])
+    print("service bucket port %d checker %s" % (BASE_PORT, running[-1][0]))
+
+
+def assign_hosts(admin):
+    nonce, page = admin.nonce("/admin/ad")
+    found = re.findall(r'name="host_(\d+)" data-team="([^"]*)"', page)
     must(found, "no team host rows on the AD page")
-    ports = {name: BASE_PORT + i for i, (name, *_) in enumerate(TEAMS)}
+    order = {name: i for i, (name, *_) in enumerate(TEAMS)}
     form = {"nonce": nonce}
     used = []
-    for team, inst in found:
-        team = team.strip()
-        must(team in ports, "no port assigned for team %s" % team)
-        form["host_" + inst] = CHECKER_HOST
-        form["port_" + inst] = str(ports[team])
-        used.append((team, ports[team]))
+    for inst, team in found:
+        team = html.unescape(team).strip()
+        if team not in order:
+            continue
+        host = team_addr(order[team])
+        form["host_" + inst] = host
+        used.append((team, host))
+    must(used, "none of the AD teams were on the host form")
     _, final, body = admin.open("/admin/ad/hosts", form)
     must("/admin/ad" in final, "could not save hosts:\n" + body[:400])
-    for team, port in used:
-        print("host %s -> %s:%d" % (team, CHECKER_HOST, port))
+    for team, host in used:
+        print("host %s -> %s:%d" % (team, host, BASE_PORT))
 
 
 def main():
@@ -332,10 +363,11 @@ def main():
     launched = False
     if os.path.isdir(TASK_DIR) and os.path.isfile(CHECKER_ZIP):
         for i, (team, *_) in enumerate(TEAMS):
-            start_vulnbox(team, BASE_PORT + i)
+            start_vulnbox(team, i)
         upload_checker(admin)
         wait_checker(admin)
         reset_checker_state()
+        create_service(admin)
         assign_hosts(admin)
         launched = True
     else:
@@ -364,7 +396,7 @@ def main():
         print("  task      %s" % TASK_DIR)
         print("  checker   %s" % CHECKER_ZIP)
         for i, (team, *_) in enumerate(TEAMS):
-            print("  %-8s  %s:%d" % (team, CHECKER_HOST, BASE_PORT + i))
+            print("  %-8s  %s:%d" % (team, team_addr(i), BASE_PORT))
 
 
 if __name__ == "__main__":

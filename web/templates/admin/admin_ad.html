@@ -5,17 +5,51 @@
 <main class="admin-main" data-deploy-poll>
   {{template "flashes" .}}
   <h2 data-i18n="admin.adTitle">Attack-Defense</h2>
-  <p class="text-muted" data-i18n="admin.adHint">Upload a task archive. The service name, port, and checker are read from the zip. Problems show up in the deploy log.</p>
+  <p class="text-muted" data-i18n="admin.adHint">Start a checker, create a service with that checker, a name and a port, then set each team's host. The service is placed on every host at that port. One checker serves every team; each team gets its own flags.</p>
 
+  <h4 data-i18n="admin.checkers">Checkers</h4>
   <form method="post" action="/admin/ad/upload" enctype="multipart/form-data" class="panel p-3 mb-4">
     <input type="hidden" name="nonce" value="{{.CSRF}}">
-    <label class="form-label" data-i18n="admin.adUpload">Upload AD archive</label>
+    <label class="form-label" data-i18n="admin.adUpload">Checker archive</label>
+    <p class="text-muted small" data-i18n="admin.checkerHint">The zip contains only the checker. The vulnerable service is not started.</p>
     <div class="row g-2 align-items-center">
       <div class="col-md-8"><input class="form-control" type="file" name="archive" accept=".zip,application/zip" required></div>
-      <div class="col-md-4"><button class="btn btn-success w-100" type="submit" data-i18n="admin.import">Import and deploy</button></div>
+      <div class="col-md-4"><button class="btn btn-success w-100" type="submit" data-i18n="admin.startChecker">Start checker</button></div>
     </div>
   </form>
+  <div class="table-responsive mb-4">
+  <table class="table table-sm">
+    <thead><tr><th data-i18n="admin.name">Name</th><th data-i18n="admin.status">Status</th><th></th></tr></thead>
+    <tbody>
+      {{range .Checkers}}
+      <tr data-checker-id="{{.ID}}" data-checker-name="{{.Name}}" data-checker-status="{{.DeployStatus}}">
+        <td class="text-nowrap"><strong>{{.Name}}</strong></td>
+        <td><span class="deploy-status badge-status {{if .DeployStatus}}badge-{{.DeployStatus}}{{end}}" data-deploy-kind="checker" data-deploy-id="{{.ID}}" {{if .DeployStatus}}data-i18n="deploy.{{.DeployStatus}}"{{end}}>{{if .DeployStatus}}{{.DeployStatus}}{{else}}—{{end}}</span></td>
+        <td class="actions">
+          <form method="post" action="/admin/ad/checkers/{{.ID}}/redeploy"><input type="hidden" name="nonce" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-light" type="submit" data-i18n="admin.redeploy">Redeploy</button></form>
+          <form method="post" action="/admin/ad/checkers/{{.ID}}/stop"><input type="hidden" name="nonce" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-warning" type="submit" data-i18n="admin.stop">Stop</button></form>
+          <form method="post" action="/admin/ad/checkers/{{.ID}}/delete" data-confirm="confirm.deleteChecker">
+            <input type="hidden" name="nonce" value="{{$.CSRF}}">
+            <button class="btn btn-sm btn-outline-danger" type="submit" data-i18n="admin.delete">Delete</button>
+          </form>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="3">
+          <details class="deploy-details" {{if .DeployLog}}open{{end}}>
+            <summary data-i18n="admin.log">Deploy log</summary>
+            <pre class="deploy-log" data-deploy-log="checker" data-deploy-id="{{.ID}}">{{.DeployLog}}</pre>
+          </details>
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="3" class="text-muted" data-i18n="admin.noCheckers">No checkers yet.</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  </div>
 
+  <h4 data-i18n="admin.adConfig">Settings</h4>
   <form method="post" action="/admin/ad/config" class="field-grid mb-4">
     <input type="hidden" name="nonce" value="{{.CSRF}}">
     <div>
@@ -33,11 +67,32 @@
     <div>
       <label class="form-label" data-i18n="admin.prepStart">Preparation starts</label>
       <input class="form-control" type="datetime-local" name="ad_prep_start" value="{{.PrepStart}}">
-      <div class="form-text">{{timezone}}</div>
+      {{$z := tzCity timezone}}
+      <div class="form-text tz-current" data-city-en="{{$z.En}}" data-city-ru="{{$z.Ru}}" data-offset="{{$z.Offset}}">{{if $z.Offset}}{{$z.En}} {{$z.Offset}}{{else}}{{$z.En}}{{end}}</div>
     </div>
     <div>
       <label class="form-label" data-i18n="admin.prepMinutes">Preparation (minutes)</label>
       <input class="form-control" name="ad_prep_minutes" value="{{.PrepMinutes}}" inputmode="numeric">
+    </div>
+    <div>
+      <label class="form-label" data-i18n="pts.attack">Attack</label>
+      <input class="form-control" name="ad_attack_reward" value="{{.Rewards.Attack}}" inputmode="numeric">
+    </div>
+    <div>
+      <label class="form-label" data-i18n="pts.defense">Defense</label>
+      <input class="form-control" name="ad_defense_reward" value="{{.Rewards.Defense}}" inputmode="numeric">
+    </div>
+    <div>
+      <label class="form-label" data-i18n="pts.lost">Lost flag</label>
+      <input class="form-control" name="ad_lost_penalty" value="{{.Rewards.Lost}}" inputmode="numeric">
+    </div>
+    <div>
+      <label class="form-label" data-i18n="pts.sla">SLA</label>
+      <input class="form-control" name="ad_sla_reward" value="{{.Rewards.SLA}}" inputmode="numeric">
+    </div>
+    <div>
+      <label class="form-label" data-i18n="pts.down">Down</label>
+      <input class="form-control" name="ad_down_penalty" value="{{.Rewards.Down}}" inputmode="numeric">
     </div>
     <div class="field-check">
       <div class="form-check mb-0">
@@ -47,96 +102,106 @@
     </div>
     <div><button class="btn btn-primary w-100" type="submit" data-i18n="admin.save">Save</button></div>
   </form>
+  <p class="text-muted small" data-i18n="admin.scoringHint">Stolen flag: the attacker gets Attack, the victim loses Lost flag. A flag that lived its whole lifetime on a working service and was not stolen gives Defense. Every OK round gives SLA. Every round a service is DOWN, MUMBLE, CORRUPT or has no host costs Down × number of opponents, so a dead service costs more than being robbed by every team. These points are the same for every service.</p>
   {{if .Round}}<p><span data-i18n="admin.currentRound">Current round</span>: <strong>{{.Round.Number}}</strong> · {{formatDate .Round.Started}}</p>{{end}}
 
-  <h4 data-i18n="admin.services">Services</h4>
+  <h4 class="mt-4" data-i18n="admin.services">Services</h4>
+  <p class="text-muted" data-i18n="admin.serviceHint">Name, port and a checker that is already running. The same port is used on every team's host. Name, port and checker can be changed after the service exists.</p>
   <form method="post" action="/admin/ad/services" class="field-grid mb-3">
     <input type="hidden" name="nonce" value="{{.CSRF}}">
     <div><label class="form-label small" data-i18n="admin.name">Name</label><input class="form-control" name="name" required></div>
-    <div><label class="form-label small" data-i18n="admin.port">Port</label><input class="form-control" type="text" inputmode="numeric" name="port"></div>
-    <div class="span-2"><label class="form-label small" data-i18n="admin.checker">Checker</label><input class="form-control" name="checker_url" placeholder="http://10.0.0.1:8091/"></div>
-    <div><label class="form-label small" data-i18n="pts.attack">Attack</label><input class="form-control" type="text" inputmode="numeric" name="attack_reward" value="10"></div>
-    <div><label class="form-label small" data-i18n="pts.defense">Defense</label><input class="form-control" type="text" inputmode="numeric" name="defense_reward" value="5"></div>
-    <div><label class="form-label small" data-i18n="pts.lost">Lost flag</label><input class="form-control" type="text" inputmode="numeric" name="defense_penalty" value="10"></div>
-    <div><label class="form-label small" data-i18n="pts.sla">SLA</label><input class="form-control" type="text" inputmode="numeric" name="sla_reward" value="2"></div>
-    <div><label class="form-label small" data-i18n="pts.down">Down</label><input class="form-control" type="text" inputmode="numeric" name="down_penalty" value="20"></div>
-    <div class="span-2"><label class="form-label small" data-i18n="admin.description">Description</label><input class="form-control" name="description"></div>
+    <div><label class="form-label small" data-i18n="admin.port">Port</label><input class="form-control" type="text" inputmode="numeric" name="port" required></div>
+    <div>
+      <label class="form-label small" data-i18n="admin.checker">Checker</label>
+      <select class="form-select" name="checker_id" required>
+        <option value="" data-i18n="admin.chooseChecker">Choose a running checker</option>
+        {{range .Checkers}}{{if eq .DeployStatus "running"}}<option value="{{.ID}}">{{.Name}}</option>{{end}}{{end}}
+      </select>
+    </div>
     <div><button class="btn btn-success w-100" type="submit" data-i18n="admin.add">Add</button></div>
   </form>
   <div class="table-responsive">
-  <table class="table table-sm">
-    <thead><tr><th data-i18n="admin.name">Name</th><th data-i18n="admin.port">Port</th><th data-i18n="admin.checker">Checker</th><th data-i18n="admin.status">Status</th><th></th></tr></thead>
+  <table class="table table-sm align-middle">
+    <thead><tr><th data-i18n="admin.name">Name</th><th data-i18n="admin.port">Port</th><th data-i18n="admin.checker">Checker</th><th></th></tr></thead>
     <tbody>
       {{range .Services}}
+      {{$svc := .}}
       <tr>
-        <td class="text-nowrap"><strong>{{.Name}}</strong></td>
-        <td>{{if .Port}}{{.Port}}{{else}}—{{end}}</td>
-        <td class="text-break">{{if .CheckerService}}{{.CheckerService}}{{else}}{{.CheckerURL}}{{end}}</td>
-        <td><span class="deploy-status badge-status {{if .DeployStatus}}badge-{{.DeployStatus}}{{end}}" data-deploy-kind="service" data-deploy-id="{{.ID}}" {{if .DeployStatus}}data-i18n="deploy.{{.DeployStatus}}"{{end}}>{{if .DeployStatus}}{{.DeployStatus}}{{else}}—{{end}}</span></td>
+        <td colspan="3">
+          <form method="post" action="/admin/ad/services" class="row g-2 align-items-center">
+            <input type="hidden" name="nonce" value="{{$.CSRF}}">
+            <input type="hidden" name="id" value="{{$svc.ID}}">
+            <div class="col-md-4"><input class="form-control form-control-sm" name="name" value="{{$svc.Name}}" required></div>
+            <div class="col-md-2"><input class="form-control form-control-sm" type="text" inputmode="numeric" name="port" value="{{$svc.Port}}" required></div>
+            <div class="col-md-4">
+              <select class="form-select form-select-sm" name="checker_id" required>
+                {{range $.Checkers}}
+                {{if or (eq .DeployStatus "running") (idEq $svc.CheckerID .ID)}}
+                <option value="{{.ID}}" {{if idEq $svc.CheckerID .ID}}selected{{end}}>{{.Name}}</option>
+                {{end}}
+                {{end}}
+              </select>
+            </div>
+            <div class="col-md-2"><button class="btn btn-sm btn-outline-light w-100" type="submit" data-i18n="admin.save">Save</button></div>
+          </form>
+        </td>
         <td class="actions">
-          {{if .ComposeDir}}
-          <form method="post" action="/admin/ad/services/{{.ID}}/redeploy"><input type="hidden" name="nonce" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-light" type="submit" data-i18n="admin.redeploy">Redeploy</button></form>
-          <form method="post" action="/admin/ad/services/{{.ID}}/stop"><input type="hidden" name="nonce" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-warning" type="submit" data-i18n="admin.stop">Stop</button></form>
-          {{end}}
-          <form method="post" action="/admin/ad/services/{{.ID}}/delete" data-confirm="confirm.deleteService">
+          <form method="post" action="/admin/ad/services/{{$svc.ID}}/delete" data-confirm="confirm.deleteService">
             <input type="hidden" name="nonce" value="{{$.CSRF}}">
             <button class="btn btn-sm btn-outline-danger" type="submit" data-i18n="admin.delete">Delete</button>
           </form>
         </td>
       </tr>
-      <tr>
-        <td colspan="5">
-          <form method="post" action="/admin/ad/services/{{.ID}}/points" class="points-form">
-            <input type="hidden" name="nonce" value="{{$.CSRF}}">
-            <span class="points-title" data-i18n="admin.points">Points</span>
-            <label><span data-i18n="pts.attack">Attack</span> <input class="form-control form-control-sm" inputmode="numeric" name="attack_reward" value="{{.AttackReward}}"></label>
-            <label><span data-i18n="pts.defense">Defense</span> <input class="form-control form-control-sm" inputmode="numeric" name="defense_reward" value="{{.DefenseReward}}"></label>
-            <label><span data-i18n="pts.lost">Lost flag</span> <input class="form-control form-control-sm" inputmode="numeric" name="defense_penalty" value="{{.DefensePenalty}}"></label>
-            <label><span data-i18n="pts.sla">SLA</span> <input class="form-control form-control-sm" inputmode="numeric" name="sla_reward" value="{{.SLAReward}}"></label>
-            <label><span data-i18n="pts.down">Down</span> <input class="form-control form-control-sm" inputmode="numeric" name="down_penalty" value="{{.DownPenalty}}"></label>
-            <button class="btn btn-sm btn-outline-light" type="submit" data-i18n="admin.save">Save</button>
-          </form>
-        </td>
-      </tr>
-      <tr>
-        <td colspan="5">
-          <details class="deploy-details" {{if .DeployLog}}open{{end}}>
-            <summary data-i18n="admin.log">Build log</summary>
-            <pre class="deploy-log" data-deploy-log="service" data-deploy-id="{{.ID}}">{{.DeployLog}}</pre>
-          </details>
-        </td>
-      </tr>
+      {{else}}
+      <tr><td colspan="4" class="text-muted" data-i18n="admin.noServices">No services yet.</td></tr>
       {{end}}
     </tbody>
   </table>
   </div>
-  <p class="text-muted small mt-2" data-i18n="admin.scoringHint">Stolen flag: the attacker gets Attack, the victim loses Lost flag. A flag that lived its whole lifetime on a working service and was not stolen gives Defense. Every OK round gives SLA. Every round a service is DOWN, MUMBLE, CORRUPT or has no host costs Down × number of opponents, so a dead service costs more than being robbed by every team.</p>
 
   <h4 class="mt-4" data-i18n="admin.hosts">Team hosts</h4>
-  <p class="text-muted" data-i18n="admin.hostsHint">Upload only the checker. Then set the host and port of each participant machine. The checker sends flags there and checks them.</p>
+  <p class="text-muted" data-i18n="admin.hostsHint">One address per team. Every service is placed on that address at the service's own port. Teams with the same service share the checker and the port, and differ by host.</p>
   {{if .Paused}}<div class="alert alert-warning" data-i18n="admin.pausedFlags">The engine is paused, so the checker is not sending flags.</div>{{end}}
-  <form method="post" action="/admin/ad/hosts">
+  <form method="post" action="/admin/ad/hosts" class="mb-3">
     <input type="hidden" name="nonce" value="{{.CSRF}}">
     <div class="table-responsive">
     <table class="table table-sm">
-      <thead><tr><th data-i18n="score.team">Team</th><th data-i18n="attack.service">Service</th><th data-i18n="admin.host">Host</th><th data-i18n="admin.port">Port</th><th data-i18n="admin.put">Flag put</th></tr></thead>
+      <thead><tr><th data-i18n="score.team">Team</th><th data-i18n="admin.host">Host</th></tr></thead>
       <tbody>
-        {{range .Hosts}}
+        {{range .Teams}}
+        {{if not .Banned}}
         <tr>
-          <td>{{.Team.Name}}</td>
-          <td>{{.Service.Name}}</td>
-          <td><input class="form-control form-control-sm" name="host_{{.ID}}" value="{{.Host}}" placeholder="10.0.1.10"></td>
-          <td><input class="form-control form-control-sm" type="text" inputmode="numeric" name="port_{{.ID}}" value="{{if .Port}}{{.Port}}{{else if .Service.Port}}{{.Service.Port}}{{end}}" placeholder="8080"></td>
-          <td>{{if not .Host}}<span class="badge-status badge-failed" data-i18n="st.NOHOST">no host</span>{{else if .PutStatus}}<span class="badge-status {{if eq .PutStatus "OK"}}badge-running{{else}}badge-failed{{end}}" data-i18n="st.{{.PutStatus}}">{{.PutStatus}}</span>{{if .PutMessage}} <span class="text-muted small tr-msg">{{.PutMessage}}</span>{{end}}{{else}}—{{end}}</td>
+          <td class="text-nowrap">{{.Name}}</td>
+          <td><input class="form-control form-control-sm" name="host_{{.ID}}" data-team="{{.Name}}" value="{{.ADHost}}" placeholder="10.0.1.10"></td>
         </tr>
+        {{end}}
         {{else}}
-        <tr><td colspan="5" class="text-muted" data-i18n="admin.hostsEmpty">No teams yet. The checker has nowhere to send flags.</td></tr>
+        <tr><td colspan="2" class="text-muted" data-i18n="admin.hostsEmpty">No teams yet. The checker has nowhere to send flags.</td></tr>
         {{end}}
       </tbody>
     </table>
     </div>
     <button class="btn btn-primary" type="submit" data-i18n="admin.saveHosts">Save hosts</button>
   </form>
+
+  <h5 data-i18n="admin.endpoints">Where the service is placed</h5>
+  <div class="table-responsive mb-4">
+  <table class="table table-sm">
+    <thead><tr><th data-i18n="score.team">Team</th><th data-i18n="attack.service">Service</th><th data-i18n="attack.endpoint">Address</th><th data-i18n="admin.put">Flag put</th></tr></thead>
+    <tbody>
+      {{range .Hosts}}
+      <tr>
+        <td>{{.Team.Name}}</td>
+        <td>{{.Service.Name}}</td>
+        <td class="font-monospace">{{if .Host}}{{.Host}}:{{if .Port}}{{.Port}}{{else}}{{.Service.Port}}{{end}}{{else}}—{{end}}</td>
+        <td>{{if not .Host}}<span class="badge-status badge-failed" data-i18n="st.NOHOST">no host</span>{{else if .PutStatus}}<span class="badge-status {{if eq .PutStatus "OK"}}badge-running{{else}}badge-failed{{end}}" data-i18n="st.{{.PutStatus}}">{{.PutStatus}}</span>{{if .PutMessage}} <span class="text-muted small tr-msg">{{.PutMessage}}</span>{{end}}{{else}}—{{end}}</td>
+      </tr>
+      {{else}}
+      <tr><td colspan="4" class="text-muted" data-i18n="admin.hostsEmpty">No teams yet. The checker has nowhere to send flags.</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  </div>
 
   <h4 class="mt-4" data-i18n="admin.checks">This round checks</h4>
   <div class="table-responsive">

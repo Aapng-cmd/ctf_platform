@@ -58,7 +58,7 @@ func (a *App) LoadTemplates() error {
 			if t.IsZero() {
 				return ""
 			}
-			return t.In(a.Store.Location()).Format("2006-01-02 15:04:05")
+			return t.In(a.Store.Location()).Format("02.01.2006 15:04:05")
 		},
 		"formatDate": func(t time.Time) string {
 			if t.IsZero() {
@@ -66,10 +66,12 @@ func (a *App) LoadTemplates() error {
 			}
 			return t.In(a.Store.Location()).Format("02.01.2006 15:04")
 		},
-		"timezone": a.Store.Timezone,
-		"add":      func(a, b int) int { return a + b },
-		"sub":      func(a, b int) int { return a - b },
-		"mul":      func(a, b int) int { return a * b },
+		"timezone":    a.Store.Timezone,
+		"zoneChoices": zoneChoices,
+		"tzCity":      tzCityByID,
+		"add":         func(a, b int) int { return a + b },
+		"sub":         func(a, b int) int { return a - b },
+		"mul":         func(a, b int) int { return a * b },
 		"seq": func(n int) []int {
 			s := make([]int, n)
 			for i := range s {
@@ -80,6 +82,7 @@ func (a *App) LoadTemplates() error {
 		"eq":       func(a, b any) bool { return a == b },
 		"has":      func(m map[uint]bool, id uint) bool { return m[id] },
 		"adKey":    func(tid, sid uint) string { return fmt.Sprintf("%d:%d", tid, sid) },
+		"idEq":     func(id *uint, other uint) bool { return id != nil && *id == other },
 		"safe":     func(s string) template.HTML { return template.HTML(s) },
 		"lower":    strings.ToLower,
 		"trim":     strings.TrimSpace,

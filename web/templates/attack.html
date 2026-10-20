@@ -40,19 +40,19 @@
   </section>
   {{end}}
 
-  {{if and .Captain .Mine}}
+  {{if .Captain}}
   <h5 data-i18n="attack.vulnbox">Your vulnbox</h5>
-  <form method="post" action="/attack/hosts" class="mb-4">
+  <p class="text-muted small" data-i18n="attack.oneHost">All of your services use this host. The port belongs to the service and is the same for every team.</p>
+  <form method="post" action="/attack/hosts" class="row g-2 mb-3">
     <input type="hidden" name="nonce" value="{{.CSRF}}">
-    {{range .Mine}}
-    <div class="row g-2 mb-2 align-items-center">
-      <div class="col-md-3 fw-semibold">{{.Service.Name}}</div>
-      <div class="col-md-6"><input class="form-control" name="host_{{.ID}}" value="{{.Host}}" placeholder="10.0.1.10"></div>
-      <div class="col-md-3"><input class="form-control" type="text" inputmode="numeric" name="port_{{.ID}}" value="{{if .Port}}{{.Port}}{{else if .Service.Port}}{{.Service.Port}}{{end}}" placeholder="8080"></div>
-    </div>
-    {{end}}
-    <button class="btn btn-outline-light btn-sm" type="submit" data-i18n="attack.save">Save hosts</button>
+    <div class="col-md-8"><input class="form-control" name="host" value="{{.Host}}" placeholder="10.0.1.10"></div>
+    <div class="col-md-4"><button class="btn btn-outline-light w-100" type="submit" data-i18n="attack.save">Save hosts</button></div>
   </form>
+  {{if .Mine}}
+  <ul class="list-unstyled small font-monospace mb-4">
+    {{range .Mine}}<li>{{.Service.Name}} — {{if $.Host}}{{$.Host}}:{{if .Port}}{{.Port}}{{else}}{{.Service.Port}}{{end}}{{else}}—{{end}}</li>{{end}}
+  </ul>
+  {{end}}
   {{end}}
 
   <h5 data-i18n="attack.network">Network</h5>

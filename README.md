@@ -98,90 +98,21 @@ Deploy needs Docker on the host that runs the app. The Compose file mounts `/var
 
 Stopping or removing the platform container (`docker stop`, `docker compose stop`, `docker compose down`) first stops and removes every task stack the platform started. The web service waits up to 2 minutes for that teardown (`stop_grace_period`) before Docker kills it. Task rows in the admin panel are marked `stopped`. Start them again with **Redeploy**.
 
-## Attack-Defense task package
+## Attack-Defense
 
-Set **Game Mode** to `Attack-Defense` or `Mixed` (teams are required). Upload the zip under **Admin → Attack-Defense**. Name, port, and checker are taken from the archive, not typed in the form. A checker is required.
+The operator guide is in [README_en.md](README_en.md) and [README_ru.md](README_ru.md).
 
-Example layout (the `chat` directory is the service name):
+Set **Game Mode** to `Attack-Defense` or `Mixed` (teams are required). The archive uploaded under **Admin → Attack-Defense** starts a checker only; the vulnerable service is not started from that zip. Then create a service with a name, a port and that running checker, and set one host per team. The service is placed on every host at the service port. One checker serves every team, and each team receives its own flags. Attack, defense, lost flag, SLA and downtime points are event-wide settings, not fields of a service. Name, port and checker can be changed after the service exists.
 
-```text
-chat/
-  DEPLOY.md
-  Dockerfile
-  PLAYER_DEPLOY.md
-  checker/
-    Dockerfile
-    checker.py
-  docker-compose.yml
-  entrypoint.sh
-  player-compose.yml
-  player.Dockerfile
-  src/
-    main.cpp
-jury/
-  README.md
-  spawn.py
-```
+Clocks use the timezone from **Admin → Config** and are shown as `DD.MM.YYYY HH:MM`. Saving a form, including a file upload, updates the page without a reload.
 
-What the platform uses:
+Each round the platform asks the checker to put a fresh flag on every team's copy of the service and then to get it back. The checker is HTTP: `POST` JSON `{"action":"put"|"get"|"check","team_id":1,"host":"...","port":1337,"flag":"FLAG{...}","round":3,"service":"web"}` and answer `{"status":"OK|DOWN|CORRUPT|MUMBLE","message":"..."}`. `ERROR` means the platform could not reach its own checker and is not scored. A team with no host is DOWN every round.
 
-- **Name** — directory that contains `docker-compose.yml` (`chat`). A player zip with the compose file at the archive root uses the compose service name (`bucket`). `player-compose.yml` is ignored. A checker directory is optional: without it the service still deploys, and SLA falls back to a TCP connect.
-- **Port** — first published host port of a service that is not named `checker` (`"7777:7777"` → `7777`).
-- **Checker** — Compose service named `checker`, or a `checker/` directory with `checker.py` or `Dockerfile`.
-- **Description** — first paragraph of `DEPLOY.md`.
-- `jury/` is not executed. `jury/spawn.py` stays in the archive for the organizers; this platform does not run it.
+Default points, edited in the Attack-Defense settings: attack +10, lost flag −10, defense +5, SLA +2 per OK round, downtime −20 multiplied by the number of opponents. A dead service costs more than being robbed by every other team.
 
-Import starts `docker compose up -d --build` in the service directory. Build errors and later checker output are stored on the service row in the admin panel. **Redeploy** and **Stop** are on that row.
+**Preparation starts** plus **Preparation (minutes)** holds the checkers and the score until that moment. A zero duration disables the window. Unpause the engine so rounds begin when the window ends.
 
-### Players' machines
-
-Teams run the player stack from `PLAYER_DEPLOY.md` / `player-compose.yml` on their own VM. The captain sets the host (and port, if it differs) on `/attack`, or an admin sets it in the host grid. An empty host is **DOWN** (`team host is not set`): the team gets no SLA points and pays the downtime penalty every round.
-
-### Flag sender and automatic checks
-
-Each round the jury (this platform) does two things for every team and service:
-
-1. **Put** a fresh flag onto the team's service.
-2. **Get** it back. If get fails, it falls back to **check**.
-
-For an uploaded Compose checker the command is:
-
-```text
-docker compose run --rm -T --no-deps --network host checker put HOST:PORT FLAG_ID FLAG 1
-docker compose run --rm -T --no-deps --network host checker get HOST:PORT FLAG_ID FLAG 1
-docker compose run --rm -T --no-deps --network host checker check HOST:PORT
-```
-
-`HOST:PORT` is the team's vulnbox. `FLAG_ID` is the numeric id of the flag for this round. The last argument `1` is the vuln number. `--network host` lets the checker reach team machines.
-
-Exit codes (ForcAD):
-
-| Code | Status |
-| --- | --- |
-| 0 or 101 | OK |
-| 102 | CORRUPT |
-| 103 | MUMBLE |
-| 104 | DOWN |
-
-A failed put is stored on the flag and fails the SLA check for that round (`flag put failed`).
-
-Scoring per service (defaults on import, editable per service under **Admin → Attack-Defense**):
-
-| Event | Points |
-| --- | --- |
-| Attack: a flag of another team was stolen | +10 to the attacker |
-| Lost flag: own flag was stolen | −10 to the victim |
-| Defense: own flag lived its whole lifetime, the checker saw it in its round, the service never failed while the flag was alive, and nobody stole it | +5 |
-| SLA: round with status OK | +2 |
-| Down: round with DOWN, MUMBLE, CORRUPT or no host | −20 × number of opponents |
-
-A dead service therefore costs more than being robbed by every other team. `ERROR` (the platform cannot reach its own checker) is not the team's fault and is not scored.
-
-A service added by hand, without an archive, can still use an HTTP checker. The jury `POST`s JSON `{"action":"put"|"check","team_id":1,"host":"...","port":1337,"flag":"FLAG{...}","round":3,"service":"web"}` and expects `{"status":"OK|DOWN|CORRUPT|MUMBLE","message":"..."}`. With no checker URL and no Compose, SLA is a TCP connect to `host:port`.
-
-Unpause the engine under **Admin → Attack-Defense** so rounds start. **Preparation starts** plus **Preparation (minutes)** holds the checkers and the score until that moment: no flags are planted, no checks are written, and stolen flags are rejected. The dashboard shows the countdown and switches to the live table when the window ends. A zero duration disables the window. Those times, and every other clock on the site, use the timezone from **Admin → Config**. One zone is shared by all participants. A wall-clock value is stored as an absolute instant.
-
-`scripts/ad_bootstrap.py` creates the admin and the teams alpha, bravo and gamma. When `TASK_DIR` and `CHECKER_ZIP` point at a service, it also starts that service on three host ports and uploads only the checker archive. The platform does not start the vulnerable container from the zip. Defaults: `/home/kali/my_AD_examples/AD1/bucket` and `bucket.zip`, ports 18101–18103, checker target `127.0.0.1`.
+`scripts/ad_bootstrap.py` creates the admin and the teams alpha, bravo and gamma. When `TASK_DIR` and `CHECKER_ZIP` are set it starts the service on `127.0.0.1`, `127.0.0.2` and `127.0.0.3` at one port (`BASE_PORT`, default 18101), uploads the checker, creates the service and saves the hosts. Defaults: `/home/kali/my_AD_examples/AD1/bucket` and `bucket.zip`.
 
 ### Submitting flags
 

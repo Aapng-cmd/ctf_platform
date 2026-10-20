@@ -50,24 +50,25 @@ document.addEventListener("submit", function (e) {
 }, true);
 
 (function () {
-  const search = document.getElementById("chal-search");
-  if (search) {
-    search.addEventListener("input", function () {
-      const q = this.value.toLowerCase();
-      document.querySelectorAll(".chal-card").forEach(function (el) {
-        el.style.display = el.dataset.name.toLowerCase().includes(q) ? "" : "none";
-      });
+  document.addEventListener("input", function (e) {
+    if (!e.target || e.target.id !== "chal-search") return;
+    const q = e.target.value.toLowerCase();
+    document.querySelectorAll(".chal-card").forEach(function (el) {
+      el.style.display = el.dataset.name.toLowerCase().includes(q) ? "" : "none";
     });
-  }
+  });
 
   let currentId = null;
-  const modalEl = document.getElementById("chalModal");
-  const modal = modalEl && window.bootstrap ? new bootstrap.Modal(modalEl) : null;
+  function showModal() {
+    const el = document.getElementById("chalModal");
+    if (!el || !window.bootstrap) return;
+    window.bootstrap.Modal.getOrCreateInstance(el).show();
+  }
 
-  document.querySelectorAll(".challenge-button").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      openChallenge(btn.dataset.id);
-    });
+  document.addEventListener("click", function (e) {
+    const btn = e.target.closest && e.target.closest(".challenge-button");
+    if (!btn) return;
+    openChallenge(btn.dataset.id);
   });
 
   async function openChallenge(id) {
@@ -119,13 +120,13 @@ document.addEventListener("submit", function (e) {
     if (d.solved_by_me) {
       document.getElementById("flagMsg").innerHTML = "<div class='alert alert-success'>" + escapeHtml(t("challenges.solved")) + "</div>";
     }
-    modal.show();
+    showModal();
   }
 
-  const form = document.getElementById("flagForm");
-  if (form) {
-    form.addEventListener("submit", async function (e) {
-      e.preventDefault();
+  document.addEventListener("submit", async function (e) {
+    if (!e.target || e.target.id !== "flagForm") return;
+    e.preventDefault();
+    {
       const submission = document.getElementById("flagInput").value;
       const res = await fetch("/api/v1/challenges/" + currentId + "/attempt", {
         method: "POST",
@@ -148,8 +149,8 @@ document.addEventListener("submit", function (e) {
       } else {
         box.innerHTML = "<div class='alert alert-danger'>" + escapeHtml(t("challenges.incorrect")) + "</div>";
       }
-    });
-  }
+    }
+  });
 
   async function unlockHint(id) {
     if (!(await window.ctfConfirm(t("challenges.confirmHint")))) return;
@@ -183,7 +184,10 @@ document.addEventListener("submit", function (e) {
     });
   }
 
-  if (document.getElementById("scoregraph")) {
+  function bindChart() {
+    const canvas = document.getElementById("scoregraph");
+    if (!canvas || canvas.dataset.chart === "1") return;
+    canvas.dataset.chart = "1";
     Promise.all([loadChart(), fetch("/api/v1/scoreboard/top/10").then(function (r) { return r.json(); })]).then(function (res) {
       const json = res[1];
       if (!json.success || !json.data) return;
@@ -211,8 +215,21 @@ document.addEventListener("submit", function (e) {
                   const d = new Date(value);
                   if (isNaN(d.getTime())) return value;
                   const zone = (document.querySelector('meta[name="ctf-timezone"]') || {}).content || "UTC";
-                  const lang = document.documentElement.lang || "ru";
-                  try { return d.toLocaleString(lang, { timeZone: zone }); } catch (e) { return d.toLocaleString(); }
+                  let parts;
+                  try {
+                    parts = new Intl.DateTimeFormat("en-GB", {
+                      timeZone: zone, day: "2-digit", month: "2-digit", year: "numeric",
+                      hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+                    }).formatToParts(d);
+                  } catch (err) {
+                    parts = new Intl.DateTimeFormat("en-GB", {
+                      day: "2-digit", month: "2-digit", year: "numeric",
+                      hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+                    }).formatToParts(d);
+                  }
+                  const g = {};
+                  parts.forEach(function (p) { g[p.type] = p.value; });
+                  return g.day + "." + g.month + "." + g.year + " " + g.hour + ":" + g.minute;
                 }
               },
               grid: { color: "#2a3b55" }
@@ -225,8 +242,10 @@ document.addEventListener("submit", function (e) {
     }).catch(function () {});
   }
 
-  const typeSel = document.getElementById("chalType");
-  if (typeSel) {
+  function bindType() {
+    const typeSel = document.getElementById("chalType");
+    if (!typeSel || typeSel.dataset.bound === "1") return;
+    typeSel.dataset.bound = "1";
     const toggle = function () {
       document.querySelectorAll(".dynamic-only").forEach(function (el) {
         el.style.display = typeSel.value === "dynamic" ? "" : "none";
@@ -275,7 +294,8 @@ document.addEventListener("submit", function (e) {
   });
 
   // Native file inputs show "Choose File" in the browser language, so draw our own label.
-  document.querySelectorAll('input[type="file"].form-control').forEach(function (input) {
+  function enhanceFiles(root) {
+    (root || document).querySelectorAll('input[type="file"].form-control').forEach(function (input) {
     const wrap = document.createElement("label");
     wrap.className = "file-pick form-control";
     const btn = document.createElement("span");
@@ -302,11 +322,17 @@ document.addEventListener("submit", function (e) {
         name.textContent = t("file.none");
       }
     });
-  });
+    });
+  }
+  window.ctfPageInit = function () {
+    bindType();
+    bindChart();
+    enhanceFiles(document);
+  };
+  window.ctfPageInit();
 })();
 
 (function () {
-  if (!document.querySelector("[data-deploy-poll]")) return;
   function paint(kind, row) {
     if (!row || row.id == null) return;
     const id = String(row.id);
@@ -333,6 +359,7 @@ document.addEventListener("submit", function (e) {
     });
   }
   function tick() {
+    if (!document.querySelector("[data-deploy-poll]")) return;
     fetch("/admin/deploy/status?t=" + Date.now(), {
       cache: "no-store",
       credentials: "same-origin",
@@ -344,6 +371,7 @@ document.addEventListener("submit", function (e) {
       if (!json || !json.success || !json.data) return;
       (json.data.challenges || []).forEach(function (row) { paint("challenge", row); });
       (json.data.services || []).forEach(function (row) { paint("service", row); });
+      (json.data.checkers || []).forEach(function (row) { paint("checker", row); });
     }).catch(function () {});
   }
   tick();
@@ -352,3 +380,92 @@ document.addEventListener("submit", function (e) {
     if (!document.hidden) tick();
   });
 })();
+
+document.addEventListener("submit", function (e) {
+  const form = e.target;
+  if (!(form instanceof HTMLFormElement)) return;
+  const method = (form.getAttribute("method") || "get").toLowerCase();
+  if (method !== "post") return;
+  if (form.id === "flagForm" || form.id === "adFlagForm") return;
+  if (form.getAttribute("data-reload") === "1") return;
+  e.preventDefault();
+  if (form.getAttribute("data-busy") === "1") return;
+  form.setAttribute("data-busy", "1");
+  const action = form.getAttribute("action") || location.pathname;
+  const button = e.submitter || form.querySelector("button[type='submit'], button:not([type])");
+  if (button) button.disabled = true;
+  fetch(action, {
+    method: "POST",
+    body: new FormData(form),
+    credentials: "same-origin",
+    redirect: "follow",
+    headers: { Accept: "text/html", "X-Requested-With": "fetch" }
+  }).then(function (res) {
+    const type = res.headers.get("content-type") || "";
+    if (type.indexOf("text/html") === -1) {
+      location.href = res.url || action;
+      return null;
+    }
+    return res.text().then(function (html) { return { html: html, url: res.url }; });
+  }).then(function (pack) {
+    if (!pack) return;
+    const doc = new DOMParser().parseFromString(pack.html, "text/html");
+    const csrf = pack.html.match(/window\.CSRF\s*=\s*"((?:\\.|[^"\\])*)"/);
+    if (csrf) window.CSRF = JSON.parse('"' + csrf[1] + '"');
+    const zone = doc.querySelector('meta[name="ctf-timezone"]');
+    const curZone = document.querySelector('meta[name="ctf-timezone"]');
+    if (zone && curZone) curZone.setAttribute("content", zone.getAttribute("content") || "UTC");
+    function swap(sel) {
+      const next = doc.querySelector(sel);
+      const cur = document.querySelector(sel);
+      if (next && cur) cur.replaceWith(document.importNode(next, true));
+    }
+    swap("nav.ctfd-navbar");
+    document.querySelectorAll("body > .container").forEach(function (n) { n.remove(); });
+    const anchor = document.querySelector(".admin-wrap, main, footer");
+    doc.querySelectorAll("body > .container").forEach(function (n) {
+      document.body.insertBefore(document.importNode(n, true), anchor);
+    });
+    if (doc.querySelector(".admin-wrap")) {
+      if (!document.querySelector(".admin-wrap")) {
+        const main = document.querySelector("main");
+        if (main) main.replaceWith(document.importNode(doc.querySelector(".admin-wrap"), true));
+      } else {
+        swap(".admin-wrap");
+      }
+    } else if (doc.querySelector("main")) {
+      const admin = document.querySelector(".admin-wrap");
+      if (admin) admin.replaceWith(document.importNode(doc.querySelector("main"), true));
+      else swap("main");
+    }
+    if (doc.title) document.title = doc.title;
+    try {
+      const next = new URL(pack.url || location.href, location.href);
+      if (next.pathname + next.search !== location.pathname + location.search) {
+        history.pushState({}, "", next.pathname + next.search);
+      }
+    } catch (err) {}
+    if (window.__adDash) {
+      window.__adDash.forEach(clearInterval);
+      window.__adDash = null;
+    }
+    if (window.__adAttack) {
+      window.__adAttack.forEach(clearInterval);
+      window.__adAttack = null;
+    }
+    document.querySelectorAll("script[data-page-script]").forEach(function (s) { s.remove(); });
+    const pageSrc = doc.querySelector("script[data-page-script]");
+    if (pageSrc && pageSrc.getAttribute("src")) {
+      const s = document.createElement("script");
+      s.src = pageSrc.getAttribute("src").split("?")[0] + "?t=" + Date.now();
+      s.setAttribute("data-page-script", "1");
+      document.body.appendChild(s);
+    }
+    if (window.ctfApply) window.ctfApply();
+    if (window.ctfPageInit) window.ctfPageInit();
+  }).catch(function () {
+    form.removeAttribute("data-busy");
+    if (button) button.disabled = false;
+    location.href = action;
+  });
+});

@@ -68,6 +68,7 @@ func Migrate(gdb *gorm.DB) error {
 		&models.Notification{},
 		&models.ConfigKV{},
 		&models.Tracking{},
+		&models.ADChecker{},
 		&models.ADService{},
 		&models.ADInstance{},
 		&models.ADRound{},
