@@ -226,6 +226,9 @@ func (e *Engine) plant(inst models.ADInstance, fl models.ADFlag) (string, string
 	if host == "" {
 		return models.CheckDown, models.ADNoHostMessage
 	}
+	if !webutil.AllowedServiceHost(host) {
+		return models.CheckDown, "host is not allowed"
+	}
 	port := inst.Port
 	if port == 0 {
 		port = inst.Service.Port
@@ -310,6 +313,9 @@ func (e *Engine) check(inst models.ADInstance, fl models.ADFlag) (string, string
 	if host == "" {
 		return models.CheckDown, models.ADNoHostMessage
 	}
+	if !webutil.AllowedServiceHost(host) {
+		return models.CheckDown, "host is not allowed"
+	}
 	if fl.PutStatus == models.CheckError {
 		return models.CheckError, fl.PutMessage
 	}
@@ -342,7 +348,7 @@ func (e *Engine) check(inst models.ADInstance, fl models.ADFlag) (string, string
 	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
 	c, err := net.DialTimeout("tcp", addr, 3*time.Second)
 	if err != nil {
-		return models.CheckDown, err.Error()
+		return models.CheckDown, "connection failed"
 	}
 	_ = c.Close()
 	return models.CheckOK, "tcp open"

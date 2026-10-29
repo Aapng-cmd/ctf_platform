@@ -6,6 +6,9 @@ import (
 	"encoding/hex"
 	"html/template"
 	"net"
+	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -15,14 +18,12 @@ import (
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
-	"github.com/yuin/goldmark/renderer/html"
 	"golang.org/x/crypto/bcrypt"
 )
 
 var md = goldmark.New(
 	goldmark.WithExtensions(extension.GFM, extension.Table),
 	goldmark.WithParserOptions(parser.WithAutoHeadingID()),
-	goldmark.WithRendererOptions(html.WithUnsafe()),
 )
 
 func Markdown(src string) template.HTML {
@@ -64,6 +65,86 @@ var emailRe = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 
 func ValidEmail(s string) bool {
 	return emailRe.MatchString(s)
+}
+
+// SafeNext keeps a same-site path. Protocol-relative and backslash targets are dropped.
+func SafeNext(next, fallback string) string {
+	next = strings.TrimSpace(next)
+	if next == "" {
+		return fallback
+	}
+	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") {
+		return fallback
+	}
+	if strings.ContainsAny(next, "\\\t\r\n") {
+		return fallback
+	}
+	u, err := url.Parse(next)
+	if err != nil || u.IsAbs() || u.Host != "" || u.Scheme != "" {
+		return fallback
+	}
+	return next
+}
+
+// AllowedServiceHost is a lab address a checker may dial. Loopback, link-local,
+// and the platform's own service names are rejected. Private lab ranges stay allowed.
+func AllowedServiceHost(host string) bool {
+	host = strings.TrimSpace(host)
+	if host == "" || len(host) > 253 {
+		return false
+	}
+	if strings.Contains(host, "://") || strings.ContainsAny(host, " \t\r\n/\\@?#") {
+		return false
+	}
+	if _, _, err := net.SplitHostPort(host); err == nil {
+		return false
+	}
+	switch strings.ToLower(host) {
+	case "localhost", "postgres", "redis", "web", "nginx", "host.docker.internal":
+		return false
+	}
+	if strings.HasSuffix(strings.ToLower(host), ".localhost") {
+		return false
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.IsLoopback() || ip.IsUnspecified() || ip.IsMulticast() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+			return false
+		}
+		return true
+	}
+	for _, label := range strings.Split(host, ".") {
+		if label == "" || len(label) > 63 || strings.HasPrefix(label, "-") || strings.HasSuffix(label, "-") {
+			return false
+		}
+		for _, r := range label {
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' {
+				continue
+			}
+			return false
+		}
+	}
+	return true
+}
+
+// UploadPath joins a stored file name onto the upload directory and rejects traversal.
+func UploadPath(dir, location string) (string, error) {
+	loc := filepath.Clean(location)
+	if loc == "." || loc == "" || filepath.IsAbs(loc) || loc == ".." || strings.HasPrefix(loc, ".."+string(os.PathSeparator)) {
+		return "", os.ErrInvalid
+	}
+	root, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	full := filepath.Join(root, loc)
+	abs, err := filepath.Abs(full)
+	if err != nil {
+		return "", err
+	}
+	if abs != root && !strings.HasPrefix(abs, root+string(os.PathSeparator)) {
+		return "", os.ErrInvalid
+	}
+	return abs, nil
 }
 
 func ValidName(s string) bool {

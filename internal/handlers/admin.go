@@ -248,10 +248,16 @@ func (a *App) AdminFileDelete(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	var f models.File
 	if a.DB.First(&f, id).Error == nil {
-		_ = os.Remove(filepath.Join(a.Cfg.UploadDir, f.Location))
+		if path, err := webutil.UploadPath(a.Cfg.UploadDir, f.Location); err == nil {
+			_ = os.Remove(path)
+		}
 		a.DB.Delete(&f)
 	}
-	c.Redirect(http.StatusFound, c.GetHeader("Referer"))
+	if f.ChallengeID != nil {
+		c.Redirect(http.StatusFound, "/admin/challenges/"+strconv.Itoa(int(*f.ChallengeID)))
+		return
+	}
+	c.Redirect(http.StatusFound, "/admin/challenges")
 }
 
 func (a *App) AdminUsers(c *gin.Context) {
@@ -291,6 +297,11 @@ func (a *App) AdminUserEditPOST(c *gin.Context) {
 		"verified":    c.PostForm("verified") == "on",
 	}
 	if p := c.PostForm("password"); p != "" {
+		if len(p) < 6 {
+			a.flash(c, "danger", "Password must be at least 6 characters.")
+			c.Redirect(http.StatusFound, "/admin/users/"+strconv.Itoa(id))
+			return
+		}
 		if hash, err := webutil.HashPassword(p); err == nil {
 			updates["password"] = hash
 		}
@@ -340,6 +351,11 @@ func (a *App) AdminTeamEditPOST(c *gin.Context) {
 		"banned":      c.PostForm("banned") == "on",
 	}
 	if p := c.PostForm("password"); p != "" {
+		if len(p) < 6 {
+			a.flash(c, "danger", "Password must be at least 6 characters.")
+			c.Redirect(http.StatusFound, "/admin/teams/"+strconv.Itoa(id))
+			return
+		}
 		if hash, err := webutil.HashPassword(p); err == nil {
 			updates["password"] = hash
 		}
@@ -563,7 +579,7 @@ func (a *App) AdminManualSolve(c *gin.Context) {
 	var ch models.Challenge
 	if a.DB.First(&user, uid).Error != nil || a.DB.First(&ch, cid).Error != nil {
 		a.flash(c, "danger", "User or challenge not found")
-		c.Redirect(http.StatusFound, c.GetHeader("Referer"))
+		c.Redirect(http.StatusFound, "/admin/scoreboard")
 		return
 	}
 	solve := models.Solve{ChallengeID: ch.ID, UserID: user.ID, TeamID: user.TeamID, Provided: "admin", Date: time.Now(), IP: c.ClientIP()}
@@ -573,7 +589,7 @@ func (a *App) AdminManualSolve(c *gin.Context) {
 		_ = scoring.RecalcChallenge(a.DB, &ch)
 		a.flash(c, "success", "Solve awarded")
 	}
-	c.Redirect(http.StatusFound, c.GetHeader("Referer"))
+	c.Redirect(http.StatusFound, "/admin/scoreboard")
 }
 
 func (a *App) AdminReset(c *gin.Context) {

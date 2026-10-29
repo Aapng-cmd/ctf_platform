@@ -328,6 +328,7 @@ document.addEventListener("submit", function (e) {
     bindType();
     bindChart();
     enhanceFiles(document);
+    foldTeamTables(document);
   };
   window.ctfPageInit();
 })();
@@ -380,6 +381,99 @@ document.addEventListener("submit", function (e) {
     if (!document.hidden) tick();
   });
 })();
+
+function foldTeamTables(root) {
+  const label = function (open) {
+    const key = open ? "dash.fold" : "dash.unfold";
+    return window.t ? window.t(key) : key;
+  };
+  if (!window.__foldLang) {
+    window.__foldLang = function () {
+      document.querySelectorAll(".team-fold-hit").forEach(function (btn) {
+        const open = btn.getAttribute("aria-expanded") !== "false";
+        btn.setAttribute("aria-label", label(open));
+      });
+    };
+    document.addEventListener("ctf:lang", window.__foldLang);
+  }
+  (root || document).querySelectorAll("table[data-fold-teams]").forEach(function (table) {
+    if (table.dataset.folded === "1") return;
+    const body = table.tBodies[0];
+    if (!body) return;
+    table.dataset.folded = "1";
+    const key = "ctf-fold:" + location.pathname + ":" + (table.getAttribute("data-fold-teams") || "teams");
+    let closed = {};
+    try { closed = JSON.parse(sessionStorage.getItem(key) || "{}"); } catch (e) { closed = {}; }
+    function save() {
+      try { sessionStorage.setItem(key, JSON.stringify(closed)); } catch (e) {}
+    }
+    const groups = [];
+    const byId = {};
+    Array.from(body.rows).forEach(function (row) {
+      const id = row.getAttribute("data-team");
+      if (!id) return;
+      if (!byId[id]) {
+        byId[id] = {
+          id: id,
+          host: row.getAttribute("data-host") || "",
+          name: row.getAttribute("data-team-name") || "",
+          rows: []
+        };
+        groups.push(byId[id]);
+      }
+      byId[id].rows.push(row);
+    });
+    groups.forEach(function (group) {
+      const summary = document.createElement("tr");
+      summary.className = "team-fold-row";
+      summary.hidden = true;
+      const cell = document.createElement("td");
+      cell.colSpan = group.rows[0].cells.length;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "team-fold-hit";
+      button.innerHTML = '<i class="bi bi-chevron-right" aria-hidden="true"></i>';
+      const name = document.createElement("span");
+      name.className = "team-fold-name";
+      name.textContent = group.name;
+      const ip = document.createElement("span");
+      ip.className = "team-fold-ip";
+      ip.textContent = group.host || "—";
+      cell.appendChild(button);
+      cell.appendChild(name);
+      cell.appendChild(ip);
+      summary.appendChild(cell);
+      group.rows[0].parentNode.insertBefore(summary, group.rows[0]);
+      const hit = document.createElement("button");
+      hit.type = "button";
+      hit.className = "team-fold-hit";
+      hit.innerHTML = '<i class="bi bi-chevron-down" aria-hidden="true"></i>';
+      const firstCell = group.rows[0].cells[0];
+      firstCell.insertBefore(hit, firstCell.firstChild);
+      function paint() {
+        const isClosed = !!closed[group.id];
+        summary.hidden = !isClosed;
+        group.rows.forEach(function (row) { row.hidden = isClosed; });
+        hit.setAttribute("aria-expanded", isClosed ? "false" : "true");
+        button.setAttribute("aria-expanded", isClosed ? "false" : "true");
+        hit.setAttribute("aria-label", label(!isClosed));
+        button.setAttribute("aria-label", label(!isClosed));
+      }
+      function toggle(event) {
+        event.preventDefault();
+        if (closed[group.id]) delete closed[group.id];
+        else closed[group.id] = 1;
+        save();
+        paint();
+      }
+      hit.addEventListener("click", toggle);
+      button.addEventListener("click", function (event) { event.stopPropagation(); toggle(event); });
+      summary.addEventListener("click", toggle);
+      paint();
+    });
+  });
+}
+window.foldTeamTables = foldTeamTables;
 
 document.addEventListener("submit", function (e) {
   const form = e.target;

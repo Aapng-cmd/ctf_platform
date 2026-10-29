@@ -41,7 +41,7 @@ func (a *App) CustomPage(c *gin.Context) {
 		return
 	}
 	if page.AuthRequired && middleware.CurrentUser(c) == nil {
-		c.Redirect(http.StatusFound, "/login?next=/"+route)
+		c.Redirect(http.StatusFound, "/login?next="+webutil.SafeNext("/"+route, "/"))
 		return
 	}
 	a.HTML(c, http.StatusOK, "index.html", gin.H{"Title": page.Title, "Page": page, "Flashes": a.flashes(c)})
@@ -193,8 +193,13 @@ func (a *App) TeamNewPOST(c *gin.Context) {
 	}
 	name := strings.TrimSpace(c.PostForm("name"))
 	password := c.PostForm("password")
-	if !webutil.ValidName(name) || len(password) < 1 {
-		a.flash(c, "danger", "Team name and password are required")
+	if !a.AuthLimiter.Allow("team-new:" + c.ClientIP()) {
+		a.flash(c, "danger", "Too many attempts. Wait a minute and try again.")
+		c.Redirect(http.StatusFound, "/teams/new")
+		return
+	}
+	if !webutil.ValidName(name) || len(password) < 6 {
+		a.flash(c, "danger", "Team name is required. Password must be at least 6 characters.")
 		c.Redirect(http.StatusFound, "/teams/new")
 		return
 	}
@@ -236,6 +241,11 @@ func (a *App) TeamJoinPOST(c *gin.Context) {
 	}
 	name := strings.TrimSpace(c.PostForm("name"))
 	password := c.PostForm("password")
+	if !a.AuthLimiter.Allow("team-join:" + c.ClientIP() + ":" + strings.ToLower(name)) {
+		a.flash(c, "danger", "Too many attempts. Wait a minute and try again.")
+		c.Redirect(http.StatusFound, "/teams/join")
+		return
+	}
 	var team models.Team
 	if err := a.DB.Preload("Members").Where("name = ?", name).First(&team).Error; err != nil || !webutil.CheckPassword(team.Password, password) {
 		a.flash(c, "danger", "That team name or password is incorrect")

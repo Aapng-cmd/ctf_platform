@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/aapng-cmd/ctf_platform/internal/models"
@@ -60,7 +61,7 @@ func Authed() gin.HandlerFunc {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "errors": []string{"Authentication required"}})
 				return
 			}
-			c.Redirect(http.StatusFound, "/login?next="+c.Request.URL.RequestURI())
+			c.Redirect(http.StatusFound, "/login?next="+url.QueryEscape(webutil.SafeNext(c.Request.URL.RequestURI(), "/challenges")))
 			c.Abort()
 			return
 		}
@@ -101,6 +102,15 @@ func NotBanned() gin.HandlerFunc {
 
 func LocalhostOnly() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// A reverse proxy on loopback would make every client look local.
+		// Forwarding headers mean the peer is a proxy, so Swagger stays closed.
+		if c.GetHeader("X-Forwarded-For") != "" || c.GetHeader("X-Real-IP") != "" || c.GetHeader("Forwarded") != "" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"errors":  []string{"API documentation is only available from localhost"},
+			})
+			return
+		}
 		// Use RemoteAddr only. ClientIP() can be spoofed via X-Forwarded-For
 		// unless trusted proxies are disabled; this stays locked to the real peer.
 		if webutil.IsLoopback(c.Request.RemoteAddr) {
@@ -111,6 +121,17 @@ func LocalhostOnly() gin.HandlerFunc {
 			"success": false,
 			"errors":  []string{"API documentation is only available from localhost"},
 		})
+	}
+}
+
+func SecurityHeaders() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		h := c.Writer.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "same-origin")
+		h.Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
+		c.Next()
 	}
 }
 
@@ -125,7 +146,10 @@ func CSRF() gin.HandlerFunc {
 		}
 		c.Set("csrf", token)
 		if c.Request.Method == http.MethodPost || c.Request.Method == http.MethodPut || c.Request.Method == http.MethodPatch || c.Request.Method == http.MethodDelete {
-			if strings.HasPrefix(c.Request.URL.Path, "/api/") {
+			// Scripts submit Attack-Defense flags with X-Team-Token and no cookie.
+			// A cross-site page cannot add that header, so this request is not CSRF.
+			// Cookie-authenticated API calls still need the CSRF token.
+			if strings.TrimSpace(c.GetHeader("X-Team-Token")) != "" {
 				c.Next()
 				return
 			}

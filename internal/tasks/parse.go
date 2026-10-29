@@ -13,6 +13,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const maxUnzipBytes int64 = 1 << 30
+
 type HintSpec struct {
 	Title   string `yaml:"title"`
 	Content string `yaml:"content"`
@@ -75,6 +77,7 @@ func Unzip(src, dest string) error {
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return err
 	}
+	var written int64
 	for _, f := range r.File {
 		name := filepath.Clean(f.Name)
 		if name == "." || strings.HasPrefix(name, "..") || filepath.IsAbs(name) {
@@ -102,11 +105,15 @@ func Unzip(src, dest string) error {
 			_ = in.Close()
 			return err
 		}
-		_, err = io.Copy(out, in)
+		n, err := io.Copy(out, io.LimitReader(in, maxUnzipBytes-written+1))
 		_ = out.Close()
 		_ = in.Close()
 		if err != nil {
 			return err
+		}
+		written += n
+		if written > maxUnzipBytes {
+			return fmt.Errorf("archive expands past %d bytes", maxUnzipBytes)
 		}
 	}
 	return nil

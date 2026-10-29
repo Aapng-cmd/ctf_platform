@@ -122,12 +122,17 @@ func (a *App) LoginGET(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/challenges")
 		return
 	}
-	a.HTML(c, http.StatusOK, "login.html", gin.H{"Title": "Login", "Next": c.Query("next"), "Flashes": a.flashes(c)})
+	a.HTML(c, http.StatusOK, "login.html", gin.H{"Title": "Login", "Next": webutil.SafeNext(c.Query("next"), ""), "Flashes": a.flashes(c)})
 }
 
 func (a *App) LoginPOST(c *gin.Context) {
 	name := strings.TrimSpace(c.PostForm("name"))
 	password := c.PostForm("password")
+	if !a.AuthLimiter.Allow("login:" + c.ClientIP() + ":" + strings.ToLower(name)) {
+		a.flash(c, "danger", "Too many attempts. Wait a minute and try again.")
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
 	var u models.User
 	if err := a.DB.Where("name = ? OR email = ?", name, name).First(&u).Error; err != nil || !webutil.CheckPassword(u.Password, password) {
 		a.flash(c, "danger", "Your username or password is incorrect")
@@ -142,8 +147,8 @@ func (a *App) LoginPOST(c *gin.Context) {
 	s := sessions.Default(c)
 	s.Set("user_id", int(u.ID))
 	_ = s.Save()
-	next := c.PostForm("next")
-	if next == "" || !strings.HasPrefix(next, "/") {
+	next := webutil.SafeNext(c.PostForm("next"), "/challenges")
+	if next == "" {
 		next = "/challenges"
 	}
 	c.Redirect(http.StatusFound, next)
@@ -169,6 +174,11 @@ func (a *App) RegisterPOST(c *gin.Context) {
 	name := strings.TrimSpace(c.PostForm("name"))
 	email := strings.TrimSpace(c.PostForm("email"))
 	password := c.PostForm("password")
+	if !a.AuthLimiter.Allow("register:" + c.ClientIP()) {
+		a.flash(c, "danger", "Too many attempts. Wait a minute and try again.")
+		c.Redirect(http.StatusFound, "/register")
+		return
+	}
 	website := strings.TrimSpace(c.PostForm("website"))
 	affiliation := strings.TrimSpace(c.PostForm("affiliation"))
 	country := strings.TrimSpace(c.PostForm("country"))

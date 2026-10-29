@@ -12,7 +12,7 @@
     </div>
     <div class="mb-3">
       <label class="form-label" data-i18n="team.password">Team Password</label>
-      <input class="form-control" type="password" name="password" required>
+      <input class="form-control" type="password" name="password" required {{if eq .Mode "create"}}minlength="6"{{end}}>
     </div>
     {{if eq .Mode "create"}}
     <div class="mb-3" hidden>

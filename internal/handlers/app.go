@@ -20,14 +20,15 @@ import (
 )
 
 type App struct {
-	DB        *gorm.DB
-	Store     *store.Store
-	Flags     flags.Store
-	Cfg       config.Config
-	Limiter   *webutil.RateLimiter
-	ADLimiter *webutil.RateLimiter
-	tmpl      *template.Template
-	adCache   adBoardCache
+	DB          *gorm.DB
+	Store       *store.Store
+	Flags       flags.Store
+	Cfg         config.Config
+	Limiter     *webutil.RateLimiter
+	AuthLimiter *webutil.RateLimiter
+	ADLimiter   *webutil.RateLimiter
+	tmpl        *template.Template
+	adCache     adBoardCache
 }
 
 func New(db *gorm.DB, st *store.Store, cfg config.Config) (*App, error) {
@@ -36,6 +37,8 @@ func New(db *gorm.DB, st *store.Store, cfg config.Config) (*App, error) {
 		Store:   st,
 		Cfg:     cfg,
 		Limiter: webutil.NewRateLimiter(time.Minute, 10),
+		// Login, registration and team passwords. Keyed by client and account so one NAT is not a single bucket.
+		AuthLimiter: webutil.NewRateLimiter(time.Minute, 30),
 		// Exploits submit every round; batches of up to 500 flags count as one request.
 		ADLimiter: webutil.NewRateLimiter(time.Minute, 120),
 	}
@@ -83,7 +86,6 @@ func (a *App) LoadTemplates() error {
 		"has":      func(m map[uint]bool, id uint) bool { return m[id] },
 		"adKey":    func(tid, sid uint) string { return fmt.Sprintf("%d:%d", tid, sid) },
 		"idEq":     func(id *uint, other uint) bool { return id != nil && *id == other },
-		"safe":     func(s string) template.HTML { return template.HTML(s) },
 		"lower":    strings.ToLower,
 		"trim":     strings.TrimSpace,
 		"split":    strings.Split,

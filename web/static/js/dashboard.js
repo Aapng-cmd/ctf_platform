@@ -20,6 +20,32 @@
   let state = null;
   let deadline = 0;
   const seen = {};
+  const foldKey = "ctf-fold:" + location.pathname;
+  let folded = {};
+  try { folded = JSON.parse(sessionStorage.getItem(foldKey) || "{}"); } catch (e) { folded = {}; }
+  function saveFold() {
+    try { sessionStorage.setItem(foldKey, JSON.stringify(folded)); } catch (e) {}
+  }
+  if (!boardEl.dataset.foldBound) {
+    boardEl.dataset.foldBound = "1";
+    boardEl.addEventListener("click", function (e) {
+      if (e.target.closest("a")) return;
+      const card = e.target.closest("[data-fold]");
+      if (!card) return;
+      const id = card.getAttribute("data-fold");
+      if (folded[id]) delete folded[id];
+      else folded[id] = 1;
+      saveFold();
+      render();
+    });
+    boardEl.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const card = e.target.closest("[data-fold]");
+      if (!card || e.target.closest("a")) return;
+      e.preventDefault();
+      card.click();
+    });
+  }
 
   try {
     const raw = document.getElementById("ad-dashboard-data");
@@ -119,11 +145,17 @@
     h += "</tr></thead><tbody>";
     teams.forEach(function (team) {
       const mine = state.me && team.account_id === state.me;
-      h += '<tr class="' + (mine ? "is-mine" : "") + '">';
-      h += '<td class="ad-col-team"><div class="ad-team">';
+      const closed = !!folded[String(team.account_id)];
+      const foldLabel = T(closed ? "dash.unfold" : "dash.fold");
+      h += '<tr class="' + (mine ? "is-mine" : "") + (closed ? " is-collapsed" : "") + '">';
+      h += '<td class="ad-col-team"><div class="ad-team" data-fold="' + team.account_id + '" role="button" tabindex="0" aria-expanded="' + (closed ? "false" : "true") + '" aria-label="' + esc(foldLabel) + '">';
       h += '<span class="ad-place p' + team.pos + '">' + team.pos + "</span>";
+      h += '<span class="ad-team-text">';
       h += '<a class="ad-team-name" href="/teams/' + team.account_id + '" title="' + esc(team.name) + '">' + esc(team.name) + "</a>";
+      h += '<span class="ad-team-ip">' + esc(team.host || "—") + "</span>";
+      h += "</span>";
       if (mine) h += '<span class="ad-you">' + esc(T("dash.you")) + "</span>";
+      h += '<i class="bi bi-chevron-' + (closed ? "right" : "down") + ' ad-fold-icon" aria-hidden="true"></i>';
       h += "</div></td>";
       h += '<td class="ad-col-score"><div class="ad-total" title="' + esc(breakdown(team)) + '">' + esc(num(team.score).replace("+", "")) + "</div></td>";
       (team.services || []).forEach(function (cell) { h += cellHTML(team, cell); });

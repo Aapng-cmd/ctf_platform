@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -357,5 +356,10 @@ func (a *App) FileDownload(c *gin.Context) {
 			return
 		}
 	}
-	c.FileAttachment(filepath.Join(a.Cfg.UploadDir, f.Location), f.Name)
+	path, err := webutil.UploadPath(a.Cfg.UploadDir, f.Location)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	c.FileAttachment(path, f.Name)
 }

@@ -180,7 +180,12 @@ func (a *App) APIUsers(c *gin.Context) {
 	}
 	var users []models.User
 	q.Order("id").Find(&users)
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": users})
+	admin := u != nil && u.IsAdmin()
+	data := make([]gin.H, 0, len(users))
+	for _, user := range users {
+		data = append(data, publicUser(user, admin))
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": data})
 }
 
 // APIUser godoc
@@ -202,7 +207,11 @@ func (a *App) APIUser(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "errors": []string{"User not found"}})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": user})
+	if user.Banned || (user.Hidden && (u == nil || !u.IsAdmin())) {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "errors": []string{"User not found"}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": publicUser(user, u != nil && u.IsAdmin())})
 }
 
 // APITeams godoc
@@ -223,7 +232,12 @@ func (a *App) APITeams(c *gin.Context) {
 		q = q.Where("hidden = ?", false)
 	}
 	q.Order("id").Find(&teams)
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": teams})
+	admin := u != nil && u.IsAdmin()
+	data := make([]gin.H, 0, len(teams))
+	for _, team := range teams {
+		data = append(data, publicTeam(team, admin, true))
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": data})
 }
 
 // APITeam godoc
@@ -245,7 +259,11 @@ func (a *App) APITeam(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "errors": []string{"Team not found"}})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": team})
+	if team.Banned || (team.Hidden && (u == nil || !u.IsAdmin())) {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "errors": []string{"Team not found"}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": publicTeam(team, u != nil && u.IsAdmin(), true)})
 }
 
 // APINotifications godoc
@@ -302,4 +320,44 @@ func (a *App) APIMe(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": u})
+}
+
+func publicUser(u models.User, admin bool) gin.H {
+	out := gin.H{
+		"id": u.ID, "name": u.Name, "website": u.Website,
+		"affiliation": u.Affiliation, "country": u.Country,
+		"team_id": u.TeamID, "created": u.Created,
+	}
+	if admin {
+		out["email"] = u.Email
+		out["type"] = u.Type
+		out["hidden"] = u.Hidden
+		out["banned"] = u.Banned
+		out["verified"] = u.Verified
+	}
+	if u.Team != nil {
+		out["team"] = publicTeam(*u.Team, admin, false)
+	}
+	return out
+}
+
+func publicTeam(t models.Team, admin, withMembers bool) gin.H {
+	out := gin.H{
+		"id": t.ID, "name": t.Name, "website": t.Website,
+		"affiliation": t.Affiliation, "country": t.Country,
+		"captain_id": t.CaptainID, "created": t.Created, "ad_host": t.ADHost,
+	}
+	if admin {
+		out["email"] = t.Email
+		out["hidden"] = t.Hidden
+		out["banned"] = t.Banned
+	}
+	if withMembers {
+		members := make([]gin.H, 0, len(t.Members))
+		for _, m := range t.Members {
+			members = append(members, publicUser(m, admin))
+		}
+		out["members"] = members
+	}
+	return out
 }

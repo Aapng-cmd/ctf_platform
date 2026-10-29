@@ -1,4 +1,4 @@
-FROM golang:1.27-bookworm AS build
+FROM golang:1.27.3-bookworm AS build
 WORKDIR /src
 COPY . .
 # vendor is the module source. -mod=vendor keeps the build off the proxy.

@@ -552,7 +552,22 @@ dialog.ctf-dialog::backdrop { background: rgba(4, 8, 16, .72); }
   gap: 10px;
   padding: 10px 12px;
   min-width: 0;
+  cursor: pointer;
 }
+.ad-team-text { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; }
+.ad-team-ip {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .75rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ad-fold-icon { flex: 0 0 auto; color: var(--muted); font-size: .85rem; }
+tr.is-collapsed td.ad-col-score,
+tr.is-collapsed td.ad-col-svc { display: none; }
+tr.is-collapsed .ad-team { min-height: 0; }
 .ad-total {
   display: grid;
   place-items: center;
@@ -581,7 +596,7 @@ tr.is-mine .ad-team, tr.is-mine .ad-total { border-color: var(--accent-strong); 
 .ad-place.p2 { background: linear-gradient(135deg, #e3e9f2, #95a3b8); border-color: #e3e9f2; color: #141a24; }
 .ad-place.p3 { background: linear-gradient(135deg, #e3a06b, #a8592a); border-color: #e3a06b; color: #1f0e03; }
 .ad-team-name {
-  flex: 1 1 auto;
+  display: block;
   min-width: 0;
   color: var(--text);
   font-weight: 600;
@@ -685,6 +700,23 @@ tr.is-mine .ad-team, tr.is-mine .ad-total { border-color: var(--accent-strong); 
   text-transform: uppercase;
   white-space: nowrap;
   border: 1px solid transparent;
+}
+.team-fold-hit {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0 6px 0 0;
+  line-height: 1;
+  vertical-align: -1px;
+}
+.team-fold-row { cursor: pointer; }
+.team-fold-row td { font-weight: 600; }
+.team-fold-ip {
+  margin-left: 10px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .82rem;
+  font-weight: 500;
 }
 .st-badge.up { background: rgba(59, 130, 246, .2); border-color: #3b82f6; color: #bcd4ff; }
 .st-badge.down { background: rgba(239, 68, 68, .18); border-color: #ef4444; color: #ffc2c2; }

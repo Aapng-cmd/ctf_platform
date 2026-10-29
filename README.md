@@ -27,11 +27,13 @@ Swagger / OpenAPI UI is **closed to the public** and only answers from **localho
 
 ```bash
 cp .env.example .env
-# set SECRET_KEY in .env
+# set SECRET_KEY, POSTGRES_PASSWORD and REDIS_PASSWORD in .env
 docker compose up --build
 ```
 
-Open [http://localhost:8000](http://localhost:8000) and complete `/setup`.
+Docker serves HTTPS on the local name in `CERT_DOMAIN` (default `ctf.local`). Add the server IP to each machine's hosts file (`10.0.0.5  ctf.local`), then open [https://ctf.local](https://ctf.local) and complete `/setup`. Port 80 and any other Host redirect to that name. The certificate is self-signed; `docker compose cp nginx:/etc/nginx/certs/ca.crt ca.crt` copies it. Postgres and Redis have no published ports.
+
+A process started with `go run` still listens on `http://127.0.0.1:8000`.
 
 ## Local development
 
@@ -119,7 +121,7 @@ Default points, edited in the Attack-Defense settings: attack +10, lost flag −
 Players submit stolen flags on `/attack`, or from scripts with the team token shown on that page (the captain can issue a new one):
 
 ```bash
-curl -s -X POST http://CTF_HOST:8000/api/v1/ad/flags \
+curl -s -X POST https://ctf.local/api/v1/ad/flags \
   -H 'X-Team-Token: TEAM_TOKEN' \
   -H 'Content-Type: application/json' \
   -d '["FLAG{...}", "FLAG{...}"]'

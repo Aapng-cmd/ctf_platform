@@ -22,7 +22,7 @@
   <link rel="stylesheet" href="/static/vendor/fonts/plex.css">
   <link rel="stylesheet" href="/static/vendor/bootstrap/bootstrap.min.css">
   <link rel="stylesheet" href="/static/vendor/bootstrap-icons/bootstrap-icons.min.css">
-  <link rel="stylesheet" href="/static/css/core.css?v=13">
+  <link rel="stylesheet" href="/static/css/core.css?v=14">
 </head>
 <body class="{{if .Admin}}admin-body{{end}}">
 {{end}}
@@ -68,7 +68,12 @@
             <li><a class="dropdown-item" href="/teams/join" data-i18n="nav.joinTeam">Join Team</a></li>{{end}}
             {{end}}
             <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item" href="/logout" data-i18n="nav.logout">Logout</a></li>
+            <li>
+              <form method="post" action="/logout">
+                <input type="hidden" name="nonce" value="{{.CSRF}}">
+                <button class="dropdown-item" type="submit" data-i18n="nav.logout">Logout</button>
+              </form>
+            </li>
           </ul>
         </li>
         {{else}}
@@ -136,10 +141,10 @@
     </div>
   </div>
 </dialog>
-<script src="/static/js/i18n.js?v=17"></script>
+<script src="/static/js/i18n.js?v=19"></script>
 <script src="/static/vendor/bootstrap/bootstrap.bundle.min.js"></script>
 <script>window.CSRF = {{.CSRF}};</script>
-<script src="/static/js/app.js?v=10"></script>
+<script src="/static/js/app.js?v=11"></script>
 {{if .PageScript}}<script src="{{.PageScript}}" data-page-script="1"></script>{{end}}
 </body>
 </html>

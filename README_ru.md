@@ -10,11 +10,19 @@
 
 ```bash
 cp .env.example .env
-# задайте SECRET_KEY в .env
+# задайте SECRET_KEY, POSTGRES_PASSWORD и REDIS_PASSWORD в .env
 docker compose up --build
 ```
 
-Откройте [http://localhost:8000](http://localhost:8000) и пройдите `/setup`.
+Сайт открывается по HTTPS на локальном имени из `CERT_DOMAIN` (по умолчанию `ctf.local`). В `/etc/hosts` каждой машины добавьте строку с IP сервера:
+
+```text
+10.0.0.5  ctf.local
+```
+
+Откройте [https://ctf.local](https://ctf.local) и пройдите `/setup`. Запрос на 80 порт и на любой другой Host перенаправляется на это имя. Сертификат самоподписанный; файл `ca.crt` лежит в томе `certs` (`docker compose cp nginx:/etc/nginx/certs/ca.crt ca.crt`). Postgres и Redis наружу не публикуются.
+
+Локальный запуск без Docker по-прежнему слушает `http://127.0.0.1:8000`.
 
 Учётные записи, задания, раунды, проверки и кражи флагов лежат в Postgres 16. Флаги режима «Атака-защита» лежат в Redis 7. Флаги Jeopardy остаются в Postgres.
 
@@ -79,10 +87,10 @@ docker compose up --build
 
 ### Сдача флага
 
-Страница `/attack` или запрос с токеном команды. Проверка CSRF для этой сдачи не нужна: сессия страницы или заголовок `X-Team-Token` уже подтверждают команду.
+Страница `/attack` или запрос с токеном команды. Скрипт с заголовком `X-Team-Token` не передаёт CSRF. Форма на сайте передаёт токен сессии.
 
 ```bash
-curl -s -X POST http://CTF_HOST:8000/api/v1/ad/flags \
+curl -s -X POST https://ctf.local/api/v1/ad/flags \
   -H 'X-Team-Token: TEAM_TOKEN' \
   -H 'Content-Type: application/json' \
   -d '["FLAG{...}"]'

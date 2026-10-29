@@ -63,8 +63,12 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.New()
-	_ = r.SetTrustedProxies(nil)
-	r.Use(gin.Logger(), gin.Recovery())
+	if len(cfg.TrustedProxies) == 0 {
+		_ = r.SetTrustedProxies(nil)
+	} else if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		log.Fatalf("trusted proxies: %v", err)
+	}
+	r.Use(gin.Logger(), gin.Recovery(), middleware.SecurityHeaders())
 	r.Use(gzip.Gzip(gzip.DefaultCompression,
 		gzip.WithExcludedExtensions([]string{".woff2", ".woff", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".zip", ".gz"}),
 		gzip.WithExcludedPathsRegexs([]string{`^/files/`, `^/swagger/`}),
@@ -75,7 +79,13 @@ func main() {
 	r.Group("/static", staticCache()).Static("", filepath.Join("web", "static"))
 
 	storeSess := cookie.NewStore([]byte(cfg.SecretKey))
-	storeSess.Options(sessions.Options{Path: "/", HttpOnly: true, MaxAge: 86400 * 14})
+	storeSess.Options(sessions.Options{
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   cfg.CookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   86400 * 14,
+	})
 	r.Use(sessions.Sessions("session", storeSess))
 	r.Use(middleware.LoadUser(gdb))
 	r.Use(middleware.CSRF())
@@ -95,7 +105,7 @@ func main() {
 	r.POST("/login", app.LoginPOST)
 	r.GET("/register", app.RegisterGET)
 	r.POST("/register", app.RegisterPOST)
-	r.GET("/logout", app.Logout)
+	r.POST("/logout", app.Logout)
 	r.GET("/challenges", app.ChallengesPage)
 	r.GET("/attack", middleware.Authed(), app.AttackPage)
 	r.POST("/attack", middleware.Authed(), middleware.NotBanned(), app.AttackSubmit)

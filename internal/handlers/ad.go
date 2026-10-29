@@ -76,8 +76,8 @@ func (a *App) AttackPage(c *gin.Context) {
 		"Title": "Attack-Defense", "Round": round, "SecondsLeft": a.roundSecondsLeft(round),
 		"Instances": insts, "Mine": mine, "Steals": steals, "Checks": checkMap, "ServiceNames": serviceNames,
 		"Captain": captain, "Token": token, "Host": host, "FlagHint": a.flagHint(),
-		"SubmitURL":  requestBase(c) + "/api/v1/ad/flags",
-		"PageScript": "/static/js/attack.js?v=4", "Flashes": a.flashes(c),
+		"SubmitURL":  a.requestBase(c) + "/api/v1/ad/flags",
+		"PageScript": "/static/js/attack.js?v=5", "Flashes": a.flashes(c),
 	})
 }
 
@@ -103,7 +103,10 @@ func (a *App) flagHint() string {
 	return prefix + "...}"
 }
 
-func requestBase(c *gin.Context) string {
+func (a *App) requestBase(c *gin.Context) string {
+	if a.Cfg.PublicURL != "" {
+		return a.Cfg.PublicURL
+	}
 	scheme := "http"
 	if c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https") {
 		scheme = "https"
@@ -151,8 +154,8 @@ func adError(c *gin.Context, code int, msg string) {
 }
 
 // adSubmitter resolves the team either from the X-Team-Token header (scripts)
-// or from the browser session. Flag submission does not require a CSRF token:
-// the session cookie is enough, and scripts authenticate with the team token.
+// or from the browser session. Token requests skip CSRF. The page sends the
+// session CSRF token with the same call.
 func (a *App) adSubmitter(c *gin.Context) (*models.Team, uint, bool) {
 	var team models.Team
 	if tok := strings.TrimSpace(c.GetHeader("X-Team-Token")); tok != "" {
@@ -328,6 +331,11 @@ func (a *App) AttackHostsPOST(c *gin.Context) {
 		return
 	}
 	host := strings.TrimSpace(c.PostForm("host"))
+	if host != "" && !webutil.AllowedServiceHost(host) {
+		a.flash(c, "danger", "That host is not allowed")
+		c.Redirect(http.StatusFound, "/attack")
+		return
+	}
 	a.DB.Model(&team).Update("ad_host", host)
 	a.DB.Model(&models.ADInstance{}).Where("team_id = ?", team.ID).Update("host", host)
 	_ = ad.EnsureInstances(a.DB)
@@ -400,7 +408,7 @@ func (a *App) DashboardPage(c *gin.Context) {
 	}
 	a.HTML(c, http.StatusOK, "dashboard.html", gin.H{
 		"Title": "Dashboard", "Board": a.dashboardData(u),
-		"PageScript": "/static/js/dashboard.js?v=5", "Flashes": a.flashes(c),
+		"PageScript": "/static/js/dashboard.js?v=6", "Flashes": a.flashes(c),
 	})
 }
 
@@ -473,7 +481,7 @@ func (a *App) AdminAD(c *gin.Context) {
 	var teams []models.Team
 	a.DB.Order("name").Find(&teams)
 	var insts []models.ADInstance
-	a.DB.Preload("Team").Preload("Service").Find(&insts)
+	a.DB.Preload("Team").Preload("Service").Order("team_id, service_id").Find(&insts)
 	round := ad.CurrentRound(a.DB)
 	var checks []models.ADCheck
 	if round != nil {
@@ -507,8 +515,10 @@ func (a *App) AdminAD(c *gin.Context) {
 		rows = append(rows, row)
 	}
 	teamNames := map[uint]string{}
+	teamHosts := map[uint]string{}
 	for _, t := range teams {
 		teamNames[t.ID] = t.Name
+		teamHosts[t.ID] = t.ADHost
 	}
 	serviceNames := map[uint]string{}
 	for _, s := range services {
@@ -517,7 +527,7 @@ func (a *App) AdminAD(c *gin.Context) {
 	a.HTML(c, http.StatusOK, "admin_ad.html", gin.H{
 		"Title": "Attack-Defense", "Admin": true, "Services": services, "Checkers": checkers, "Teams": teams,
 		"Instances": insts, "Hosts": rows, "Round": round, "Checks": checks, "Steals": steals,
-		"TeamNames": teamNames, "ServiceNames": serviceNames, "Rewards": a.Store.ADRewards(),
+		"TeamNames": teamNames, "TeamHosts": teamHosts, "ServiceNames": serviceNames, "Rewards": a.Store.ADRewards(),
 		"Paused": a.Store.ADPaused(), "RoundSeconds": a.Store.ADRoundSeconds(),
 		"FlagLife": a.Store.ADFlagLifetime(), "FlagPrefix": a.Store.ADFlagPrefix(),
 		"PrepStart": clockInput(a.Store.ADPrepStart(), a.Store.Location()), "PrepMinutes": a.Store.ADPrepMinutes(),
@@ -695,6 +705,18 @@ func (a *App) AdminADServiceDelete(c *gin.Context) {
 func (a *App) AdminADHostsPOST(c *gin.Context) {
 	var teams []models.Team
 	a.DB.Where("banned = ?", false).Find(&teams)
+	for _, team := range teams {
+		key := "host_" + strconv.Itoa(int(team.ID))
+		if _, ok := c.GetPostForm(key); !ok {
+			continue
+		}
+		host := strings.TrimSpace(c.PostForm(key))
+		if host != "" && !webutil.AllowedServiceHost(host) {
+			a.flash(c, "danger", "That host is not allowed")
+			c.Redirect(http.StatusFound, "/admin/ad")
+			return
+		}
+	}
 	for _, team := range teams {
 		key := "host_" + strconv.Itoa(int(team.ID))
 		if _, ok := c.GetPostForm(key); !ok {

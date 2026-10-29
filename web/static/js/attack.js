@@ -84,7 +84,7 @@
     try {
       const res = await fetch("/api/v1/ad/flags", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/json", "CSRF-Token": window.CSRF || "" },
         body: JSON.stringify({ submission: submission })
       });
       const json = await res.json();

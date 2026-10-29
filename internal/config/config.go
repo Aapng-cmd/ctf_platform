@@ -10,17 +10,20 @@ import (
 )
 
 type Config struct {
-	Port          string
-	SecretKey     string
-	DatabaseURL   string
-	Driver        string
-	UploadDir     string
-	DataDir       string
-	PublicHost    string
-	TasksDir      string
-	RedisAddr     string
-	RedisPassword string
-	RedisDB       int
+	Port           string
+	SecretKey      string
+	DatabaseURL    string
+	Driver         string
+	UploadDir      string
+	DataDir        string
+	PublicHost     string
+	TasksDir       string
+	RedisAddr      string
+	RedisPassword  string
+	RedisDB        int
+	CookieSecure   bool
+	PublicURL      string
+	TrustedProxies []string
 }
 
 func getenv(key, fallback string) string {
@@ -54,18 +57,32 @@ func Load() Config {
 	}
 	dataDir := getenv("DATA_DIR", "data")
 	return Config{
-		Port:          getenv("PORT", "8000"),
-		SecretKey:     getenv("SECRET_KEY", "change-me-please-use-a-long-random-secret"),
-		DatabaseURL:   dsn,
-		Driver:        driver,
-		UploadDir:     getenv("UPLOAD_DIR", "data/uploads"),
-		DataDir:       dataDir,
-		PublicHost:    getenv("PUBLIC_HOST", "127.0.0.1"),
-		TasksDir:      getenv("TASKS_DIR", filepath.Join(dataDir, "tasks")),
-		RedisAddr:     getenv("REDIS_ADDR", "127.0.0.1:6379"),
-		RedisPassword: os.Getenv("REDIS_PASSWORD"),
-		RedisDB:       EnvInt("REDIS_DB", 0),
+		Port:           getenv("PORT", "8000"),
+		SecretKey:      getenv("SECRET_KEY", "change-me-please-use-a-long-random-secret"),
+		DatabaseURL:    dsn,
+		Driver:         driver,
+		UploadDir:      getenv("UPLOAD_DIR", "data/uploads"),
+		DataDir:        dataDir,
+		PublicHost:     getenv("PUBLIC_HOST", "127.0.0.1"),
+		TasksDir:       getenv("TASKS_DIR", filepath.Join(dataDir, "tasks")),
+		RedisAddr:      getenv("REDIS_ADDR", "127.0.0.1:6379"),
+		RedisPassword:  os.Getenv("REDIS_PASSWORD"),
+		RedisDB:        EnvInt("REDIS_DB", 0),
+		CookieSecure:   IsTruthy(os.Getenv("COOKIE_SECURE")),
+		PublicURL:      strings.TrimRight(os.Getenv("PUBLIC_URL"), "/"),
+		TrustedProxies: splitList(os.Getenv("TRUSTED_PROXIES")),
 	}
+}
+
+func splitList(v string) []string {
+	var out []string
+	for _, part := range strings.Split(v, ",") {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 func EnvInt(key string, fallback int) int {

@@ -39,6 +39,7 @@ type ADStanding struct {
 	Score       int             `json:"score"`
 	Place       int             `json:"pos"`
 	Affiliation string          `json:"affiliation"`
+	Host        string          `json:"host"`
 	Services    []ADServiceCell `json:"services"`
 }
 
@@ -178,7 +179,7 @@ func ADDashboard(db *gorm.DB, defended map[[2]uint]int, includeHidden bool, rewa
 		}
 	}
 	for _, t := range teams {
-		st := ADStanding{AccountID: t.ID, Name: t.Name, Affiliation: t.Affiliation, Services: []ADServiceCell{}}
+		st := ADStanding{AccountID: t.ID, Name: t.Name, Affiliation: t.Affiliation, Host: t.ADHost, Services: []ADServiceCell{}}
 		for _, s := range svcs {
 			cv := *cell(t.ID, s.ID)
 			if !hosted[key{t.ID, s.ID}] {

@@ -1,22 +1,42 @@
 services:
+  nginx:
+    build: ./deploy/nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CERT_DOMAIN: ${CERT_DOMAIN:-ctf.local}
+      CERT_SANS: ${CERT_SANS:-}
+    volumes:
+      - certs:/etc/nginx/certs
+    depends_on:
+      - web
+    networks:
+      - edge
+    restart: unless-stopped
+
   web:
     build: .
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
       PORT: "8000"
       DB_DRIVER: postgres
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
-      POSTGRES_DB: ctfd
-      POSTGRES_USER: ctfd
-      POSTGRES_PASSWORD: ctfd
+      POSTGRES_DB: ${POSTGRES_DB:-ctfd}
+      POSTGRES_USER: ${POSTGRES_USER:-ctfd}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       REDIS_ADDR: redis:6379
-      SECRET_KEY: ${SECRET_KEY:-change-this-to-a-long-random-string}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
       UPLOAD_DIR: /app/data/uploads
       DATA_DIR: /app/data
       TASKS_DIR: /app/data/tasks
       PUBLIC_HOST: ${PUBLIC_HOST:-127.0.0.1}
+      PUBLIC_URL: https://${CERT_DOMAIN:-ctf.local}
+      COOKIE_SECURE: "true"
+      TRUSTED_PROXIES: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1
       GIN_MODE: release
     depends_on:
       postgres:
@@ -30,36 +50,58 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     stop_grace_period: 2m
     restart: unless-stopped
+    networks:
+      - edge
+      - data
 
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ctfd
-      POSTGRES_USER: ctfd
-      POSTGRES_PASSWORD: ctfd
+      POSTGRES_DB: ${POSTGRES_DB:-ctfd}
+      POSTGRES_USER: ${POSTGRES_USER:-ctfd}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ctfd -d ctfd"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 20
       start_period: 10s
     restart: unless-stopped
+    networks:
+      - data
 
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    command:
+      - sh
+      - -c
+      - |
+        if [ -n "$$REDIS_PASSWORD" ]; then
+          exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+        fi
+        exec redis-server --appendonly yes
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" ping; else redis-cli ping; fi"]
       interval: 5s
       timeout: 3s
       retries: 20
     restart: unless-stopped
+    networks:
+      - data
+
+networks:
+  edge:
+  data:
+    internal: true
 
 volumes:
   postgres_data:
   redis_data:
   uploads:
+  certs:

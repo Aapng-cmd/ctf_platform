@@ -186,11 +186,11 @@
 
   <h5 data-i18n="admin.endpoints">Where the service is placed</h5>
   <div class="table-responsive mb-4">
-  <table class="table table-sm">
+  <table class="table table-sm" data-fold-teams>
     <thead><tr><th data-i18n="score.team">Team</th><th data-i18n="attack.service">Service</th><th data-i18n="attack.endpoint">Address</th><th data-i18n="admin.put">Flag put</th></tr></thead>
     <tbody>
       {{range .Hosts}}
-      <tr>
+      <tr data-team="{{.TeamID}}" data-host="{{.Host}}" data-team-name="{{.Team.Name}}">
         <td>{{.Team.Name}}</td>
         <td>{{.Service.Name}}</td>
         <td class="font-monospace">{{if .Host}}{{.Host}}:{{if .Port}}{{.Port}}{{else}}{{.Service.Port}}{{end}}{{else}}—{{end}}</td>
@@ -205,11 +205,11 @@
 
   <h4 class="mt-4" data-i18n="admin.checks">This round checks</h4>
   <div class="table-responsive">
-  <table class="table table-sm">
+  <table class="table table-sm" data-fold-teams>
     <thead><tr><th data-i18n="admin.team">Team</th><th data-i18n="admin.service">Service</th><th data-i18n="admin.status">Status</th><th data-i18n="admin.message">Message</th></tr></thead>
     <tbody>
       {{range .Checks}}
-      <tr>
+      <tr data-team="{{.TeamID}}" data-host="{{index $.TeamHosts .TeamID}}" data-team-name="{{index $.TeamNames .TeamID}}">
         <td class="text-nowrap">{{index $.TeamNames .TeamID}}</td>
         <td class="text-nowrap">{{index $.ServiceNames .ServiceID}}</td>
         <td><span class="badge-status {{if eq .Status "OK"}}badge-running{{else}}badge-failed{{end}}" data-i18n="st.{{.Status}}">{{.Status}}</span></td>

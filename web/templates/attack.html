@@ -57,12 +57,12 @@
 
   <h5 data-i18n="attack.network">Network</h5>
   <div class="table-responsive mb-4">
-    <table class="table table-sm align-middle">
+    <table class="table table-sm align-middle" data-fold-teams>
       <thead><tr><th data-i18n="score.team">Team</th><th data-i18n="attack.service">Service</th><th data-i18n="attack.endpoint">Address</th><th data-i18n="admin.status">Status</th></tr></thead>
       <tbody>
         {{range .Instances}}
         {{$st := index $.Checks (adKey .TeamID .ServiceID)}}
-        <tr>
+        <tr data-team="{{.TeamID}}" data-host="{{.Host}}" data-team-name="{{.Team.Name}}">
           <td class="text-nowrap"><a href="/teams/{{.TeamID}}">{{.Team.Name}}</a></td>
           <td class="text-nowrap">{{.Service.Name}}</td>
           <td class="text-nowrap font-monospace small">{{if .Host}}{{.Host}}:{{if .Port}}{{.Port}}{{else}}{{.Service.Port}}{{end}}{{else}}—{{end}}</td>

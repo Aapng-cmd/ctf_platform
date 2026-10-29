@@ -10,11 +10,19 @@ Russian guide: [README_ru.md](README_ru.md).
 
 ```bash
 cp .env.example .env
-# set SECRET_KEY in .env
+# set SECRET_KEY, POSTGRES_PASSWORD and REDIS_PASSWORD in .env
 docker compose up --build
 ```
 
-Open [http://localhost:8000](http://localhost:8000) and finish `/setup`.
+The site is served over HTTPS on the local name in `CERT_DOMAIN` (default `ctf.local`). Add the server IP to each machine's hosts file:
+
+```text
+10.0.0.5  ctf.local
+```
+
+Open [https://ctf.local](https://ctf.local) and finish `/setup`. Port 80 and any other Host redirect to that name. The certificate is self-signed; copy `ca.crt` from the `certs` volume (`docker compose cp nginx:/etc/nginx/certs/ca.crt ca.crt`). Postgres and Redis are not published on the host.
+
+A local process without Docker still listens on `http://127.0.0.1:8000`.
 
 Accounts, challenges, rounds, checks and steals are in Postgres 16. Attack-Defense flags are in Redis 7. Jeopardy flags stay in Postgres.
 
@@ -79,10 +87,10 @@ Each round the platform plants a new flag and reads it back. The platform does n
 
 ### Submitting a flag
 
-Use `/attack`, or a request with the team token. That submit does not check CSRF: the page session or the `X-Team-Token` header already identifies the team.
+Use `/attack`, or a request with the team token. A script that sends `X-Team-Token` does not send a CSRF token. The form on the site sends the session token.
 
 ```bash
-curl -s -X POST http://CTF_HOST:8000/api/v1/ad/flags \
+curl -s -X POST https://ctf.local/api/v1/ad/flags \
   -H 'X-Team-Token: TEAM_TOKEN' \
   -H 'Content-Type: application/json' \
   -d '["FLAG{...}"]'
