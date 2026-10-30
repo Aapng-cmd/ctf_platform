@@ -488,6 +488,9 @@ document.addEventListener("submit", function (e) {
   const action = form.getAttribute("action") || location.pathname;
   const button = e.submitter || form.querySelector("button[type='submit'], button:not([type])");
   if (button) button.disabled = true;
+  // Drop the card as soon as the request leaves. The reply swaps the page.
+  const card = form.closest(".auth-card");
+  if (card) card.hidden = true;
   fetch(action, {
     method: "POST",
     body: new FormData(form),
@@ -515,9 +518,10 @@ document.addEventListener("submit", function (e) {
       if (next && cur) cur.replaceWith(document.importNode(next, true));
     }
     swap("nav.ctfd-navbar");
-    document.querySelectorAll("body > .container").forEach(function (n) { n.remove(); });
+    // Flashes are div.container. A main.container must not be copied beside the old form.
+    document.querySelectorAll("body > div.container").forEach(function (n) { n.remove(); });
     const anchor = document.querySelector(".admin-wrap, main, footer");
-    doc.querySelectorAll("body > .container").forEach(function (n) {
+    doc.querySelectorAll("body > div.container").forEach(function (n) {
       document.body.insertBefore(document.importNode(n, true), anchor);
     });
     if (doc.querySelector(".admin-wrap")) {
@@ -528,9 +532,14 @@ document.addEventListener("submit", function (e) {
         swap(".admin-wrap");
       }
     } else if (doc.querySelector("main")) {
+      const nextMain = document.importNode(doc.querySelector("main"), true);
       const admin = document.querySelector(".admin-wrap");
-      if (admin) admin.replaceWith(document.importNode(doc.querySelector("main"), true));
-      else swap("main");
+      if (admin) admin.replaceWith(nextMain);
+      else {
+        const mains = document.querySelectorAll("body > main");
+        if (mains.length) mains[0].replaceWith(nextMain);
+        for (let i = 1; i < mains.length; i++) mains[i].remove();
+      }
     }
     if (doc.title) document.title = doc.title;
     try {
@@ -560,6 +569,7 @@ document.addEventListener("submit", function (e) {
   }).catch(function () {
     form.removeAttribute("data-busy");
     if (button) button.disabled = false;
+    if (card) card.hidden = false;
     location.href = action;
   });
 });

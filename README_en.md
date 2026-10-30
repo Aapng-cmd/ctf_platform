@@ -71,7 +71,7 @@ A dead service costs more than being robbed by every opponent. ERROR means the p
 
 ### Preparation
 
-**Preparation starts** and **Preparation (minutes)** keep the checkers off and the score still until the window ends. A zero duration disables the window. Clear the engine pause so rounds begin when preparation ends.
+**Preparation (minutes)** keeps the checkers off and the score still until the window ends. The window starts when the settings are saved. A zero duration disables it. Clear the engine pause so rounds begin when preparation ends.
 
 ### Checker
 
@@ -102,7 +102,7 @@ An own flag returns `own_flag` and the text `Cannot submit own flag`. During pre
 
 ## Test stand
 
-`scripts/ad_bootstrap.py` creates an admin and the teams alpha, bravo and gamma. When a task directory and a checker zip are set, the script starts the service on `127.0.0.1`, `127.0.0.2` and `127.0.0.3` at one port, uploads the checker, creates the service and saves the hosts.
+`scripts/ad_bootstrap.py` creates an admin and the teams alpha, bravo and gamma. When a task directory and a checker zip are set, the script starts the service on `10.255.66.1`, `10.255.66.2` and `10.255.66.3` at one port, uploads the checker, creates the service and saves the hosts. Loopback addresses are rejected. The default site is `https://ctf.local`.
 
 ```bash
 python3 scripts/ad_bootstrap.py

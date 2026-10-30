@@ -1,11 +1,16 @@
 package ad
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/aapng-cmd/ctf_platform/internal/flags"
 	"github.com/aapng-cmd/ctf_platform/internal/models"
+	"github.com/aapng-cmd/ctf_platform/internal/store"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -106,4 +111,79 @@ func TestCheckWithoutHostIsDown(t *testing.T) {
 	if ch.Status != models.CheckDown || ch.Message != models.ADNoHostMessage {
 		t.Fatalf("check = %s %q", ch.Status, ch.Message)
 	}
+}
+
+func TestRoundFlipDoesNotWaitForCheckers(t *testing.T) {
+	// cache=shared keeps one memory database across the pool. A plain
+	// file::memory: name gives every connection an empty database.
+	db, err := gorm.Open(sqlite.Open("file:roundflip?mode=memory&cache=shared"), &gorm.Config{Logger: logger.Discard})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&models.Team{}, &models.ADService{}, &models.ADInstance{}, &models.ADRound{}, &models.ADFlag{}, &models.ADCheck{}, &models.ADSteal{}, &models.ConfigKV{}); err != nil {
+		t.Fatal(err)
+	}
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		once.Do(func() { close(entered) })
+		<-release
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "OK"})
+	}))
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+		slow.Close()
+	})
+
+	st := store.New(db)
+	if err := st.SetMany(map[string]string{
+		"game_mode":        models.GameAttackDefense,
+		"ad_round_seconds": "15",
+		"ad_paused":        "false",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	e := &Engine{
+		DB: db, Store: st, Flags: flags.NewMemory(),
+		http: &http.Client{Timeout: 5 * time.Second},
+	}
+	svc := models.ADService{Name: "svc", Active: true, Port: 18091, CheckerURL: slow.URL}
+	if err := db.Create(&svc).Error; err != nil {
+		t.Fatal(err)
+	}
+	team := models.Team{Name: "alpha", ADHost: "203.0.113.10"}
+	if err := db.Create(&team).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.ADInstance{TeamID: team.ID, ServiceID: svc.ID, Host: "203.0.113.10", Port: 18091}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.ADRound{Number: 1, Started: time.Now().Add(-20 * time.Second)}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	began := time.Now()
+	e.tick()
+	if elapsed := time.Since(began); elapsed > 400*time.Millisecond {
+		t.Fatalf("round flip waited %s for the checker", elapsed)
+	}
+	var rounds []models.ADRound
+	if err := db.Order("number").Find(&rounds).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(rounds) != 2 || rounds[1].Number != 2 || rounds[0].Ended == nil {
+		t.Fatalf("rounds = %+v", rounds)
+	}
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("checker was never called")
+	}
+	close(release)
 }

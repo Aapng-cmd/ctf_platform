@@ -65,14 +65,9 @@
       <input class="form-control" name="ad_flag_prefix" value="{{.FlagPrefix}}">
     </div>
     <div>
-      <label class="form-label" data-i18n="admin.prepStart">Preparation starts</label>
-      <input class="form-control" type="datetime-local" name="ad_prep_start" value="{{.PrepStart}}">
-      {{$z := tzCity timezone}}
-      <div class="form-text tz-current" data-city-en="{{$z.En}}" data-city-ru="{{$z.Ru}}" data-offset="{{$z.Offset}}">{{if $z.Offset}}{{$z.En}} {{$z.Offset}}{{else}}{{$z.En}}{{end}}</div>
-    </div>
-    <div>
       <label class="form-label" data-i18n="admin.prepMinutes">Preparation (minutes)</label>
       <input class="form-control" name="ad_prep_minutes" value="{{.PrepMinutes}}" inputmode="numeric">
+      <div class="form-text" data-i18n="admin.prepHint">The window starts when you save. Zero turns it off.</div>
     </div>
     <div>
       <label class="form-label" data-i18n="pts.attack">Attack</label>

@@ -142,7 +142,7 @@ func (s *Store) ADPaused() bool {
 }
 
 func (s *Store) ADRoundSeconds() int {
-	n := s.Int("ad_round_seconds", 60)
+	n := s.Int("ad_round_seconds", 15)
 	if n < 15 {
 		return 15
 	}

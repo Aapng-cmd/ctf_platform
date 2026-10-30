@@ -48,7 +48,7 @@ func (a *App) SetupPOST(c *gin.Context) {
 	if mode != models.ModeTeams {
 		mode = models.ModeUsers
 	}
-	loc, zone, zerr := loadZone(c.PostForm("timezone"))
+	_, zone, zerr := loadZone(c.PostForm("timezone"))
 	if zerr != nil {
 		a.flash(c, "danger", "Unknown timezone")
 		c.Redirect(http.StatusFound, "/setup")
@@ -90,7 +90,7 @@ func (a *App) SetupPOST(c *gin.Context) {
 		"game_mode":               game,
 		"timezone":                zone,
 		"ad_paused":               "true",
-		"ad_round_seconds":        "60",
+		"ad_round_seconds":        "15",
 		"ad_flag_lifetime_rounds": "3",
 		"ad_flag_prefix":          "FLAG{",
 		"setup":                   "true",
@@ -98,8 +98,8 @@ func (a *App) SetupPOST(c *gin.Context) {
 		"score_visibility":        models.VisibilityPublic,
 		"account_visibility":      models.VisibilityPublic,
 		"registration_visibility": models.VisibilityPublic,
-		"start":                   clockValue(c.PostForm("start"), loc),
-		"end":                     clockValue(c.PostForm("end"), loc),
+		"start":                   "",
+		"end":                     "",
 		"verify_emails":           "false",
 		"max_team_size":           "0",
 		"theme":                   "core",

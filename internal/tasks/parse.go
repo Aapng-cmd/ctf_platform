@@ -130,9 +130,10 @@ func ParseJeopardy(root string) (*JeopardySpec, error) {
 		if err := yaml.Unmarshal(b, spec); err != nil {
 			return nil, fmt.Errorf("task.yml: %w", err)
 		}
-		spec.Root = root
+		spec.Root = filepath.Dir(meta)
 	} else if readme := findFile(root, "README.md"); readme != "" {
 		applyReadme(spec, readme)
+		spec.Root = filepath.Dir(readme)
 	}
 	compose, dir := findCompose(root, true)
 	if compose != "" {
@@ -621,22 +622,38 @@ func vulnService(path string) (string, int, error) {
 	}
 	name := ""
 	port := 0
+	best := 99
 	for svc, body := range c.Services {
 		if strings.EqualFold(svc, "checker") {
 			continue
 		}
-		if name == "" {
+		p := firstPort(body.Ports)
+		rank := serviceRank(svc)
+		if name == "" || (p > 0 && (rank < best || (rank == best && port == 0))) {
 			name = svc
-		}
-		if p := firstPort(body.Ports); p > 0 && port == 0 {
-			name = svc
-			port = p
+			if p > 0 {
+				port = p
+				best = rank
+			}
 		}
 	}
 	if name == "" {
 		return "", 0, fmt.Errorf("no challenge service in %s", filepath.Base(path))
 	}
 	return name, port, nil
+}
+
+// serviceRank prefers the service players open. Databases and SSH lose to the web or task process.
+func serviceRank(name string) int {
+	n := strings.ToLower(name)
+	switch {
+	case n == "mysql" || n == "mongo" || n == "mongodb" || n == "db" || n == "database" || n == "redis" || n == "postgres" || n == "postgresql":
+		return 2
+	case n == "machine" || n == "ssh" || strings.Contains(n, "ssh"):
+		return 1
+	default:
+		return 0
+	}
 }
 
 func adServices(path string) (service string, port int, checker string, err error) {

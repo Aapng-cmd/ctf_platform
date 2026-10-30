@@ -112,9 +112,9 @@ Each round the platform asks the checker to put a fresh flag on every team's cop
 
 Default points, edited in the Attack-Defense settings: attack +10, lost flag −10, defense +5, SLA +2 per OK round, downtime −20 multiplied by the number of opponents. A dead service costs more than being robbed by every other team.
 
-**Preparation starts** plus **Preparation (minutes)** holds the checkers and the score until that moment. A zero duration disables the window. Unpause the engine so rounds begin when the window ends.
+**Preparation (minutes)** holds the checkers and the score until the window ends. The window starts when the settings are saved. A zero duration disables it. Unpause the engine so rounds begin when the window ends.
 
-`scripts/ad_bootstrap.py` creates the admin and the teams alpha, bravo and gamma. When `TASK_DIR` and `CHECKER_ZIP` are set it starts the service on `127.0.0.1`, `127.0.0.2` and `127.0.0.3` at one port (`BASE_PORT`, default 18101), uploads the checker, creates the service and saves the hosts. Defaults: `/home/kali/my_AD_examples/AD1/bucket` and `bucket.zip`.
+`scripts/ad_bootstrap.py` creates the admin and the teams alpha, bravo and gamma. When `TASK_DIR` and `CHECKER_ZIP` are set it starts the service on `10.255.66.1`, `10.255.66.2` and `10.255.66.3` at one port (`BASE_PORT`, default 18101), uploads the checker, creates the service and saves the hosts. Loopback addresses are rejected. Defaults: `/home/kali/my_AD_examples/AD1/bucket` and `bucket.zip`. The site is `https://ctf.local`.
 
 ### Submitting flags
 

@@ -192,9 +192,28 @@
     const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
     leftEl.textContent = T("attack.leftFmt").replace("{n}", left);
     barEl.style.width = total ? Math.min(100, ((total - left) / total) * 100) + "%" : "0%";
+    // The 3s poll used to leave the clock on zero until the next interval.
+    if (left === 0) {
+      if (!zeroSince) zeroSince = Date.now();
+      if (Date.now() - zeroSince < 8000) pollSoon();
+    } else {
+      zeroSince = 0;
+    }
+  }
+
+  let polling = false;
+  let zeroSince = 0;
+  let lastSoon = 0;
+  function pollSoon() {
+    const now = Date.now();
+    if (now - lastSoon < 300) return;
+    lastSoon = now;
+    poll();
   }
 
   async function poll() {
+    if (polling) return;
+    polling = true;
     try {
       const res = await fetch("/api/v1/ad/dashboard?t=" + Date.now(), { cache: "no-store", credentials: "same-origin" });
       if (!res.ok) return;
@@ -206,6 +225,8 @@
       tickTimer();
     } catch (e) {
       /* keep the last board on network errors */
+    } finally {
+      polling = false;
     }
   }
 

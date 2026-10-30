@@ -25,6 +25,9 @@ type Engine struct {
 	http  *http.Client
 	stop  chan struct{}
 	mu    sync.Mutex
+
+	workMu   sync.Mutex
+	inflight map[uint]struct{}
 }
 
 func New(db *gorm.DB, st *store.Store, fl flags.Store) *Engine {
@@ -50,31 +53,34 @@ func (e *Engine) Stop() {
 }
 
 func (e *Engine) loop() {
-	t := time.NewTicker(3 * time.Second)
-	defer t.Stop()
+	// Wake on the round deadline. A fixed 3s poll left the finished round on
+	// screen until the next tick, which is the pause the dashboard showed.
+	timer := time.NewTimer(200 * time.Millisecond)
+	defer timer.Stop()
 	for {
 		select {
 		case <-e.stop:
 			return
-		case <-t.C:
-			e.mu.Lock()
-			e.tick()
-			e.mu.Unlock()
+		case <-timer.C:
+			wait := e.tick()
+			if wait < 20*time.Millisecond {
+				wait = 20 * time.Millisecond
+			}
+			timer.Reset(wait)
 		}
 	}
 }
 
-func (e *Engine) tick() {
-	if !e.Store.IsAD() {
-		return
-	}
+func (e *Engine) tick() time.Duration {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	// Preparation writes no checks and settles nothing, so the score cannot move.
-	if e.Store.Preparing() {
-		return
+	if !e.Store.IsAD() || e.Store.Preparing() {
+		return time.Second
 	}
 	e.settleFlags()
 	if e.Store.ADPaused() || !e.Store.DuringCTF() {
-		return
+		return time.Second
 	}
 	_ = EnsureInstances(e.DB)
 	dur := time.Duration(e.Store.ADRoundSeconds()) * time.Second
@@ -83,19 +89,24 @@ func (e *Engine) tick() {
 	now := time.Now()
 	if err != nil {
 		e.startRound(1)
-		return
+		return time.Second
 	}
 	if round.Ended == nil && now.Sub(round.Started) >= dur {
 		e.finishRound(&round)
 		e.startRound(round.Number + 1)
-		return
+		return time.Second
 	}
 	if round.Ended == nil {
-		e.retryPuts(&round)
+		e.scheduleWork(round.ID)
+		left := dur - now.Sub(round.Started)
+		if left < 20*time.Millisecond {
+			return 20 * time.Millisecond
+		}
+		if left < time.Second {
+			return left
+		}
 	}
-	if round.Ended == nil && !round.ChecksDone {
-		e.runChecks(&round)
-	}
+	return time.Second
 }
 
 func (e *Engine) startRound(n int) {
@@ -128,31 +139,9 @@ func (e *Engine) startRound(n int) {
 			_ = e.Flags.Save(&row)
 		}
 	}
-	e.pushFlags(&round)
-	e.runChecks(&round)
-}
-
-func (e *Engine) retryPuts(round *models.ADRound) {
-	if e.Flags == nil {
-		return
-	}
-	for _, fl := range e.Flags.NeedsPut(round.ID) {
-		var inst models.ADInstance
-		if err := e.DB.Preload("Service").Preload("Team").Where("team_id = ? AND service_id = ?", fl.TeamID, fl.ServiceID).First(&inst).Error; err != nil {
-			continue
-		}
-		if strings.TrimSpace(inst.Host) == "" {
-			continue
-		}
-		status, msg := e.plant(inst, fl)
-		_ = e.Flags.SetPut(fl.ID, status, msg)
-		if status != models.CheckError && round.ChecksDone {
-			// The host was set during the round: replace the "no host" DOWN with a real check.
-			e.DB.Where("round_id = ? AND team_id = ? AND service_id = ? AND message = ?",
-				round.ID, inst.TeamID, inst.ServiceID, models.ADNoHostMessage).Delete(&models.ADCheck{})
-			e.checkOne(round, inst)
-		}
-	}
+	// Puts and checks talk to every team. Doing that here kept the new round
+	// invisible until the slowest checker answered.
+	e.scheduleWork(round.ID)
 }
 
 // settleFlags marks expired flags as defended when the checker saw the flag in its
@@ -174,20 +163,6 @@ func (e *Engine) settleFlags() {
 			defended = seen > 0 && failed == 0 && stolen == 0
 		}
 		_ = e.Flags.Settle(fl.ID, defended)
-	}
-}
-
-func (e *Engine) pushFlags(round *models.ADRound) {
-	if e.Flags == nil {
-		return
-	}
-	for _, fl := range e.Flags.ByRound(round.ID) {
-		var inst models.ADInstance
-		if err := e.DB.Preload("Service").Where("team_id = ? AND service_id = ?", fl.TeamID, fl.ServiceID).First(&inst).Error; err != nil {
-			continue
-		}
-		status, msg := e.plant(inst, fl)
-		_ = e.Flags.SetPut(fl.ID, status, msg)
 	}
 }
 
@@ -249,20 +224,113 @@ func (e *Engine) plant(inst models.ADInstance, fl models.ADFlag) (string, string
 }
 
 func (e *Engine) finishRound(round *models.ADRound) {
-	if !round.ChecksDone {
-		e.runChecks(round)
-	}
 	now := time.Now()
-	_ = e.DB.Model(round).Updates(map[string]any{"ended": now, "checks_done": true}).Error
+	_ = e.DB.Model(round).Update("ended", now).Error
+	round.Ended = &now
+	e.scheduleWork(round.ID)
+}
+
+// scheduleWork runs puts and checks for a round without blocking the ticker.
+// The same round is not started twice while a pass is already in flight.
+func (e *Engine) scheduleWork(id uint) {
+	if id == 0 {
+		return
+	}
+	e.workMu.Lock()
+	if e.inflight == nil {
+		e.inflight = map[uint]struct{}{}
+	}
+	if _, busy := e.inflight[id]; busy {
+		e.workMu.Unlock()
+		return
+	}
+	e.inflight[id] = struct{}{}
+	e.workMu.Unlock()
+	go func() {
+		defer func() {
+			e.workMu.Lock()
+			delete(e.inflight, id)
+			e.workMu.Unlock()
+		}()
+		e.workRound(id)
+	}()
+}
+
+func (e *Engine) workRound(id uint) {
+	var round models.ADRound
+	if err := e.DB.First(&round, id).Error; err != nil {
+		return
+	}
+	e.plantPending(&round)
+	if !round.ChecksDone {
+		e.runChecks(&round)
+	}
+}
+
+func (e *Engine) plantPending(round *models.ADRound) {
+	if e.Flags == nil {
+		return
+	}
+	var pending []models.ADFlag
+	for _, fl := range e.Flags.ByRound(round.ID) {
+		if fl.PutStatus == "" || fl.PutMessage == models.ADNoHostMessage || fl.PutStatus == models.CheckError {
+			pending = append(pending, fl)
+		}
+	}
+	parallel(len(pending), func(i int) {
+		e.plantOne(round, pending[i])
+	})
+}
+
+func (e *Engine) plantOne(round *models.ADRound, fl models.ADFlag) {
+	var inst models.ADInstance
+	if err := e.DB.Preload("Service").Preload("Team").Where("team_id = ? AND service_id = ?", fl.TeamID, fl.ServiceID).First(&inst).Error; err != nil {
+		return
+	}
+	if strings.TrimSpace(inst.Host) == "" && fl.PutStatus != "" {
+		return
+	}
+	status, msg := e.plant(inst, fl)
+	_ = e.Flags.SetPut(fl.ID, status, msg)
+	if status != models.CheckError && round.ChecksDone {
+		// The host was set during the round: replace the "no host" DOWN with a real check.
+		e.DB.Where("round_id = ? AND team_id = ? AND service_id = ? AND message = ?",
+			round.ID, inst.TeamID, inst.ServiceID, models.ADNoHostMessage).Delete(&models.ADCheck{})
+		e.checkOne(round, inst)
+	}
 }
 
 func (e *Engine) runChecks(round *models.ADRound) {
 	var insts []models.ADInstance
 	e.DB.Preload("Service").Preload("Team").Find(&insts)
-	for _, inst := range insts {
-		e.checkOne(round, inst)
-	}
+	parallel(len(insts), func(i int) {
+		e.checkOne(round, insts[i])
+	})
 	_ = e.DB.Model(round).Update("checks_done", true).Error
+	round.ChecksDone = true
+}
+
+// parallel runs fn over n items, at most 16 at a time.
+func parallel(n int, fn func(int)) {
+	if n <= 0 {
+		return
+	}
+	workers := n
+	if workers > 16 {
+		workers = 16
+	}
+	sem := make(chan struct{}, workers)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			fn(i)
+		}(i)
+	}
+	wg.Wait()
 }
 
 func (e *Engine) checkOne(round *models.ADRound, inst models.ADInstance) {

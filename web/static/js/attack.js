@@ -34,6 +34,12 @@
     if (!state.during) { leftEl.textContent = T("dash.stopped"); return; }
     const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
     leftEl.textContent = T("attack.leftFmt").replace("{n}", left);
+    if (left === 0) {
+      if (!zeroSince) zeroSince = Date.now();
+      if (Date.now() - zeroSince < 8000) pollSoon();
+    } else {
+      zeroSince = 0;
+    }
   }
 
   function paintStatus(el, status) {
@@ -43,7 +49,19 @@
     el.textContent = T("st." + (status || "WAIT"));
   }
 
+  let polling = false;
+  let zeroSince = 0;
+  let lastSoon = 0;
+  function pollSoon() {
+    const now = Date.now();
+    if (now - lastSoon < 300) return;
+    lastSoon = now;
+    poll();
+  }
+
   async function poll() {
+    if (polling) return;
+    polling = true;
     try {
       const res = await fetch("/api/v1/ad/dashboard?t=" + Date.now(), { cache: "no-store", credentials: "same-origin" });
       if (!res.ok) return;
@@ -68,6 +86,8 @@
       tickTimer();
     } catch (e) {
       /* keep the last values on network errors */
+    } finally {
+      polling = false;
     }
   }
 

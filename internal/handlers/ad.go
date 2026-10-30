@@ -77,7 +77,7 @@ func (a *App) AttackPage(c *gin.Context) {
 		"Instances": insts, "Mine": mine, "Steals": steals, "Checks": checkMap, "ServiceNames": serviceNames,
 		"Captain": captain, "Token": token, "Host": host, "FlagHint": a.flagHint(),
 		"SubmitURL":  a.requestBase(c) + "/api/v1/ad/flags",
-		"PageScript": "/static/js/attack.js?v=5", "Flashes": a.flashes(c),
+		"PageScript": "/static/js/attack.js?v=6", "Flashes": a.flashes(c),
 	})
 }
 
@@ -408,7 +408,7 @@ func (a *App) DashboardPage(c *gin.Context) {
 	}
 	a.HTML(c, http.StatusOK, "dashboard.html", gin.H{
 		"Title": "Dashboard", "Board": a.dashboardData(u),
-		"PageScript": "/static/js/dashboard.js?v=6", "Flashes": a.flashes(c),
+		"PageScript": "/static/js/dashboard.js?v=7", "Flashes": a.flashes(c),
 	})
 }
 
@@ -530,8 +530,8 @@ func (a *App) AdminAD(c *gin.Context) {
 		"TeamNames": teamNames, "TeamHosts": teamHosts, "ServiceNames": serviceNames, "Rewards": a.Store.ADRewards(),
 		"Paused": a.Store.ADPaused(), "RoundSeconds": a.Store.ADRoundSeconds(),
 		"FlagLife": a.Store.ADFlagLifetime(), "FlagPrefix": a.Store.ADFlagPrefix(),
-		"PrepStart": clockInput(a.Store.ADPrepStart(), a.Store.Location()), "PrepMinutes": a.Store.ADPrepMinutes(),
-		"Flashes": a.flashes(c),
+		"PrepMinutes": a.Store.ADPrepMinutes(),
+		"Flashes":     a.flashes(c),
 	})
 }
 
@@ -541,13 +541,14 @@ func (a *App) AdminADConfigPOST(c *gin.Context) {
 		paused = "true"
 	}
 	base := models.DefaultADRewards()
+	minutes := formInt(c, "ad_prep_minutes", 0)
 	_ = a.Store.SetMany(map[string]string{
 		"ad_paused":               paused,
 		"ad_round_seconds":        c.PostForm("ad_round_seconds"),
 		"ad_flag_lifetime_rounds": c.PostForm("ad_flag_lifetime_rounds"),
 		"ad_flag_prefix":          c.PostForm("ad_flag_prefix"),
-		"ad_prep_start":           clockValue(c.PostForm("ad_prep_start"), a.Store.Location()),
-		"ad_prep_minutes":         c.PostForm("ad_prep_minutes"),
+		"ad_prep_start":           nextPrepStart(a.Store.ADPrepMinutes(), a.Store.Get("ad_prep_start"), minutes, time.Now()),
+		"ad_prep_minutes":         strconv.Itoa(minutes),
 		"ad_attack_reward":        strconv.Itoa(formInt(c, "ad_attack_reward", base.Attack)),
 		"ad_defense_reward":       strconv.Itoa(formInt(c, "ad_defense_reward", base.Defense)),
 		"ad_lost_penalty":         strconv.Itoa(formInt(c, "ad_lost_penalty", base.Lost)),
@@ -557,6 +558,18 @@ func (a *App) AdminADConfigPOST(c *gin.Context) {
 	a.dropADCache()
 	a.flash(c, "success", "Attack-Defense settings saved")
 	c.Redirect(http.StatusFound, "/admin/ad")
+}
+
+// nextPrepStart begins a preparation window when the duration changes.
+// The same duration keeps the current start. Zero duration clears it.
+func nextPrepStart(prevMinutes int, prevStart string, minutes int, now time.Time) string {
+	if minutes <= 0 {
+		return ""
+	}
+	if minutes == prevMinutes && strings.TrimSpace(prevStart) != "" {
+		return strings.TrimSpace(prevStart)
+	}
+	return now.UTC().Format(time.RFC3339)
 }
 
 func clockInput(t *time.Time, loc *time.Location) string {

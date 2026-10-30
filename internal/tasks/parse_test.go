@@ -59,6 +59,45 @@ func TestParsePackages(t *testing.T) {
 	}
 }
 
+func TestPlayerPortSkipsSSH(t *testing.T) {
+	dir := t.TempDir()
+	compose := "services:\n  machine:\n    ports:\n      - \"2222:22\"\n  web:\n    ports:\n      - \"5000:5000\"\n  mysql:\n    ports:\n      - \"3306:3306\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "docker-compose.yml"), []byte(compose), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "task.yml"), []byte("name: Quest\nflag: flag{x}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 20; i++ {
+		spec, err := ParseJeopardy(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if spec.Service != "web" || spec.Port != 5000 {
+			t.Fatalf("run %d: service=%s port=%d", i, spec.Service, spec.Port)
+		}
+	}
+}
+
+func TestMetadataDirIsFileRoot(t *testing.T) {
+	dir := t.TempDir()
+	hello := filepath.Join(dir, "hello")
+	if err := os.MkdirAll(filepath.Join(hello, "dist"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "name: Hello\ncategory: Web\nvalue: 150\nflag: flag{hi}\nfiles:\n  - dist/hello.zip\n"
+	if err := os.WriteFile(filepath.Join(hello, "task.yml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	spec, err := ParseJeopardy(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec.Name != "Hello" || filepath.Base(spec.Root) != "hello" || len(spec.Files) != 1 || spec.Files[0] != "dist/hello.zip" {
+		t.Fatalf("%+v", spec)
+	}
+}
+
 func TestPlayerDistWithoutChecker(t *testing.T) {
 	dir := t.TempDir()
 	zipPath := filepath.Join(dir, "bucket.zip")

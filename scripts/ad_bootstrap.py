@@ -2,23 +2,25 @@
 """Create an Attack-Defense admin, three teams, and a preparation window.
 
 Also starts the bucket service once per team on the same port and a different
-loopback address, uploads only the checker, creates the service, and saves hosts.
+lab address, uploads only the checker, creates the service, and saves hosts.
 The platform does not start the vulnerable container.
 
     python3 scripts/ad_bootstrap.py
-    BASE=http://127.0.0.1:8000 PREP_MINUTES=10 python3 scripts/ad_bootstrap.py
+    BASE=https://ctf.local PREP_MINUTES=10 python3 scripts/ad_bootstrap.py
     TASK_DIR=/path/to/bucket CHECKER_ZIP=/path/to/bucket.zip BASE_PORT=18101 python3 scripts/ad_bootstrap.py
 
-CTF_TIMEZONE overrides the zone taken from /etc/localtime. With the default
-CHECKER_HOST=127.0.0.1 the teams are published on 127.0.0.1, 127.0.0.2 and
-127.0.0.3 at BASE_PORT. The checker uses the host network, so those addresses
-reach the published ports.
+CTF_TIMEZONE overrides the zone taken from /etc/localtime. The platform
+rejects loopback hosts, so the default teams are published on 10.255.66.1,
+10.255.66.2 and 10.255.66.3 at BASE_PORT. Those addresses are added on the
+loopback interface. The checker uses the host network and dials them there.
+The local HTTPS certificate is self-signed, so this client does not verify it.
 """
 
 import html
 import json
 import os
 import re
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -29,7 +31,8 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from http.cookiejar import CookieJar
 
-BASE = os.environ.get("BASE", "http://127.0.0.1:8000").rstrip("/")
+BASE = os.environ.get("BASE", "https://ctf.local").rstrip("/")
+LAB_PREFIX = "10.255.66."
 PREP_MINUTES = os.environ.get("PREP_MINUTES", "10")
 TASK_DIR = os.environ.get("TASK_DIR", "/home/kali/my_AD_examples/AD1/bucket")
 CHECKER_ZIP = os.environ.get("CHECKER_ZIP", "/home/kali/my_AD_examples/AD1/bucket/bucket.zip")
@@ -51,7 +54,11 @@ TEAMS = [
 class Client:
     def __init__(self):
         self.jar = CookieJar()
-        self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.jar))
+        ctx = ssl._create_unverified_context()
+        self.opener = urllib.request.build_opener(
+            urllib.request.HTTPSHandler(context=ctx),
+            urllib.request.HTTPCookieProcessor(self.jar),
+        )
 
     def open(self, path, data=None, timeout=60):
         body = None if data is None else urllib.parse.urlencode(data).encode()
@@ -59,6 +66,7 @@ class Client:
 
     def raw(self, path, body, timeout=60, content_type=None):
         req = urllib.request.Request(BASE + path, data=body)
+        req.add_header("Accept-Encoding", "identity")
         if content_type:
             req.add_header("Content-Type", content_type)
         try:
@@ -128,14 +136,13 @@ def login_admin():
     return admin
 
 
-def configure(admin, start):
+def configure(admin):
     nonce, _ = admin.nonce("/admin/ad")
     _, final, body = admin.open("/admin/ad/config", {
         "nonce": nonce,
         "ad_round_seconds": "60",
         "ad_flag_lifetime_rounds": "3",
         "ad_flag_prefix": "FLAG{",
-        "ad_prep_start": start,
         "ad_prep_minutes": PREP_MINUTES,
     })
     must("/admin/ad" in final, "could not save AD settings:\n" + body[:400])
@@ -213,13 +220,35 @@ def create_team(user, email, user_password, team_password):
 
 
 def team_addr(index):
-    if CHECKER_HOST == "127.0.0.1":
-        return "127.0.0.%d" % (index + 1)
-    return CHECKER_HOST
+    host = CHECKER_HOST.strip()
+    # 127.0.0.1 used to mean "give each team its own loopback alias".
+    # The platform now rejects every loopback host, so the lab uses 10.255.66.0/24.
+    if host in ("", "127.0.0.1"):
+        return "%s%d" % (LAB_PREFIX, index + 1)
+    if host.startswith("127.") or host.lower() in ("localhost", "::1"):
+        sys.exit("CHECKER_HOST %s is loopback; the platform will not send the checker there" % host)
+    return host
+
+
+def ensure_addr(host):
+    """Publish ports on a private address that is present on this machine."""
+    if not host.startswith(LAB_PREFIX):
+        return
+    probe = subprocess.run(["ip", "-o", "-4", "addr", "show", "dev", "lo"], capture_output=True, text=True)
+    if re.search(r"\b%s/" % re.escape(host), probe.stdout or ""):
+        return
+    cmd = ["ip", "addr", "add", "%s/32" % host, "dev", "lo"]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0 and "File exists" not in (proc.stderr or ""):
+        proc = subprocess.run(["sudo", "-n", *cmd], capture_output=True, text=True)
+    if proc.returncode != 0 and "File exists" not in (proc.stderr or ""):
+        sys.exit("could not add %s on lo (checkers cannot use 127.0.0.0/8):\n%s" % (host, (proc.stderr or proc.stdout or "").strip()))
+    print("lab address %s/32 on lo" % host)
 
 
 def start_vulnbox(team, index):
     host = team_addr(index)
+    ensure_addr(host)
     handle = tempfile.NamedTemporaryFile("w", suffix=".yml", delete=False)
     handle.write(
         "services:\n"
@@ -356,7 +385,7 @@ def main():
     admin = login_admin()
     start = datetime.now(timezone.utc).replace(microsecond=0)
     if fresh:
-        configure(admin, start.strftime("%Y-%m-%dT%H:%M:%S+00:00"))
+        configure(admin)
     for user, email, user_password, team_password in TEAMS:
         create_team(user, email, user_password, team_password)
     save_timezone(admin, host_timezone())
