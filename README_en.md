@@ -30,7 +30,7 @@ Accounts, challenges, rounds, checks and steals are in Postgres 16. Attack-Defen
 
 One timezone is shared by the whole event. Pick it during setup and under **Admin → Config** from the city list. The label follows the interface language: "Москва UTC+3" or "Moscow UTC+3". The offset follows the current daylight-saving rules.
 
-Every shown date and time uses that zone and the form **DD.MM.YYYY HH:MM**. A `datetime-local` field is still edited as wall-clock time in the selected zone; the stored value is an absolute instant.
+Every shown date and time uses that zone and the form **DD.MM.YYYY HH:MM**.
 
 ## No full reload
 
@@ -38,7 +38,7 @@ Saving a form, including a file upload, goes through `fetch`. The tab does not r
 
 ## Attack-Defense
 
-Turn the mode on in config: **Attack-Defense** or **Mixed**. Teams are required.
+Jeopardy stays available. Start and stop Attack-Defense from **Admin → Attack-Defense**. Only one event runs at a time. Pause does not archive it. Stop saves the dashboard by round, without team addresses, and stops and removes the checkers. Checkers are not stored in the archive. The archive replays that dashboard round by round or at 1x, 2x and 4x, and lists every change of the round coefficients.
 
 Deploy chain:
 
@@ -69,6 +69,8 @@ Defaults:
 
 A dead service costs more than being robbed by every opponent. ERROR means the platform could not reach its own checker and does not change the team's score.
 
+During a live event the admin can add or remove a team's points more than once. The parentheses are the final sum of those changes, not the last change, and the sum is not multiplied by the SLA reward. The number in front is the standing total. A team with no admin points has no parentheses.
+
 ### Preparation
 
 **Preparation (minutes)** keeps the checkers off and the score still until the window ends. The window starts when the settings are saved. A zero duration disables it. Clear the engine pause so rounds begin when preparation ends.
@@ -87,7 +89,7 @@ Each round the platform plants a new flag and reads it back. The platform does n
 
 ### Submitting a flag
 
-Use `/attack`, or a request with the team token. A script that sends `X-Team-Token` does not send a CSRF token. The form on the site sends the session token.
+Use `/attack`, or a request with the team token. CSRF is skipped only for `POST` and `PUT /api/v1/ad/flags` when the request carries `X-Team-Token`. The site form does not send that header; it sends the session token.
 
 ```bash
 curl -s -X POST https://ctf.local/api/v1/ad/flags \
@@ -98,7 +100,11 @@ curl -s -X POST https://ctf.local/api/v1/ad/flags \
 
 An own flag returns `own_flag` and the text `Cannot submit own flag`. During preparation the submit returns 403.
 
-`/dashboard` is public unless score visibility is hidden or limited to admins.
+`/dashboard` is public unless score visibility is hidden or limited to admins. The open board polls every 3 seconds. An archive recording does not: it steps through the saved rounds, or plays them at 1x, 2x and 4x. One speed unit is that round's own length.
+
+## Several copies of the site
+
+One process runs the Attack-Defense clock and Docker (`AD_ENGINE=true`, the default). Extra copies set `AD_ENGINE=false` and must not receive the Docker socket. The copies share `SECRET_KEY`. `DB_MAX_OPEN` is one process's database pool, kept between 4 and 128. A request is one JSON line on stdout, without the body, query string or cookies. A successful dashboard poll is not logged.
 
 ## Test stand
 

@@ -1,0 +1,36 @@
+{{template "head" .}}
+{{template "navbar" .}}
+{{template "flashes" .}}
+<main class="container-fluid ad-dash py-4" id="ad-dashboard">
+  <div class="ad-dash-head">
+    <div>
+      <h2 class="mb-2"><a href="/archive" data-i18n="archive.title">Archive</a></h2>
+      <div class="mb-2">{{formatDate .Event.Started}}{{if .Event.Ended}} — {{formatDate .Event.Ended}}{{end}}</div>
+      <div id="ad-rounds" class="d-flex flex-wrap gap-1">
+        {{if not .HasFrames}}<span class="text-muted" data-i18n="archive.noRounds">No rounds.</span>{{end}}
+      </div>
+      <div id="ad-play" class="d-flex flex-wrap gap-1 mt-2"{{if not .HasFrames}} hidden{{end}}>
+        <button type="button" class="btn btn-sm btn-outline-light" data-speed="1">1x</button>
+        <button type="button" class="btn btn-sm btn-outline-light" data-speed="2">2x</button>
+        <button type="button" class="btn btn-sm btn-outline-light" data-speed="4">4x</button>
+        <button type="button" class="btn btn-sm btn-outline-light" data-speed="0" data-i18n="archive.pause">Pause</button>
+      </div>
+    </div>
+    {{if .User}}{{if .User.IsAdmin}}
+    <form method="post" action="/admin/ad/archive/{{.Event.ID}}/delete" data-confirm="confirm.deleteArchive">
+      <input type="hidden" name="nonce" value="{{.CSRF}}">
+      <button class="btn btn-outline-danger" type="submit" data-i18n="admin.delete">Delete</button>
+    </form>
+    {{end}}{{end}}
+  </div>
+  <div id="ad-coeffs" class="ad-coeffs"></div>
+  <div class="ad-round mb-3">
+    <div class="ad-round-label" data-i18n="attack.round">Round</div>
+    <div class="ad-round-num" id="adRoundNum">—</div>
+    <div class="ad-round-left" id="adRoundLeft"></div>
+    <div class="ad-round-bar"><span id="adRoundBar"></span></div>
+  </div>
+  <div class="ad-board" id="adBoard"></div>
+  {{if .Pack}}<script type="application/json" id="ad-archive-data">{{.Pack}}</script>{{end}}
+</main>
+{{template "footer" .}}

@@ -27,34 +27,54 @@ func (a *App) ChallengesPage(c *gin.Context) {
 	challenges := a.visibleChallenges(u)
 	solved := map[uint]bool{}
 	if u != nil {
-		solved = scoring.SolvedIDs(a.DB, u.ID, u.TeamID, a.Store.IsTeams())
-	}
-	byCat := map[string][]models.Challenge{}
-	var cats []string
-	seen := map[string]bool{}
-	for _, ch := range challenges {
-		if !seen[ch.Category] {
-			cats = append(cats, ch.Category)
-			seen[ch.Category] = true
-		}
-		byCat[ch.Category] = append(byCat[ch.Category], ch)
+		solved = scoring.SolvedIDs(a.DB, u.ID, nil, false)
 	}
 	a.HTML(c, http.StatusOK, "challenges.html", gin.H{
-		"Title": "Challenges", "Categories": cats, "ByCategory": byCat, "Solved": solved, "Flashes": a.flashes(c),
+		"Title": "Challenges", "Categories": challengeBoard(challenges, solved), "Solved": solved, "Flashes": a.flashes(c),
 	})
 }
 
-func (a *App) visibleChallenges(u *models.User) []models.Challenge {
-	q := a.DB.Preload("Tags").Order("category, value, id")
-	if u == nil || !u.IsAdmin() {
-		q = q.Where("state = ?", models.StateVisible)
+type challengeGroup struct {
+	Name   string
+	Solved int
+	Total  int
+	Items  []models.Challenge
+}
+
+func challengeBoard(challenges []models.Challenge, solved map[uint]bool) []challengeGroup {
+	groups := make([]challengeGroup, len(models.Categories))
+	index := map[string]int{}
+	for i, c := range models.Categories {
+		groups[i] = challengeGroup{Name: c.Name}
+		index[c.Name] = i
 	}
+	for _, ch := range challenges {
+		name := models.CanonicalCategory(ch.Category)
+		i, ok := index[name]
+		if !ok {
+			i = len(groups)
+			index[name] = i
+			groups = append(groups, challengeGroup{Name: name})
+		}
+		groups[i].Total++
+		if solved[ch.ID] {
+			groups[i].Solved++
+		}
+		groups[i].Items = append(groups[i].Items, ch)
+	}
+	return groups
+}
+
+func (a *App) visibleChallenges(u *models.User) []models.Challenge {
+	q := a.DB.Preload("Tags").Order("category, value, id").
+		Where("state = ?", models.StateVisible).
+		Where("compose_dir = '' OR compose_dir IS NULL OR deploy_status = ?", "running")
 	var all []models.Challenge
 	q.Find(&all)
 	if u == nil {
 		return all
 	}
-	solved := scoring.SolvedIDs(a.DB, u.ID, u.TeamID, a.Store.IsTeams())
+	solved := scoring.SolvedIDs(a.DB, u.ID, nil, false)
 	var out []models.Challenge
 	for _, ch := range all {
 		if a.canAccessChallenge(ch, solved, u.IsAdmin()) {
@@ -65,11 +85,11 @@ func (a *App) visibleChallenges(u *models.User) []models.Challenge {
 }
 
 func (a *App) canAccessChallenge(ch models.Challenge, solved map[uint]bool, admin bool) bool {
+	if !ch.Listed() {
+		return false
+	}
 	if admin {
 		return true
-	}
-	if ch.State != models.StateVisible {
-		return false
 	}
 	for _, id := range ch.RequiredIDs() {
 		if !solved[id] {
@@ -96,15 +116,10 @@ func (a *App) ChallengeJSON(c *gin.Context) {
 	isSolved := false
 	attempts := 0
 	if u != nil {
-		solved = scoring.SolvedIDs(a.DB, u.ID, u.TeamID, a.Store.IsTeams())
-		unlocked = scoring.UnlockedHintIDs(a.DB, u.ID, u.TeamID, a.Store.IsTeams())
+		solved = scoring.SolvedIDs(a.DB, u.ID, nil, false)
+		unlocked = scoring.UnlockedHintIDs(a.DB, u.ID, nil, false)
 		isSolved = solved[ch.ID]
-		q := a.DB.Model(&models.Submission{}).Where("challenge_id = ? AND type = ?", ch.ID, models.SubmissionIncorrect)
-		if a.Store.IsTeams() && u.TeamID != nil {
-			q = q.Where("team_id = ?", *u.TeamID)
-		} else {
-			q = q.Where("user_id = ?", u.ID)
-		}
+		q := a.DB.Model(&models.Submission{}).Where("challenge_id = ? AND user_id = ? AND type = ?", ch.ID, u.ID, models.SubmissionIncorrect)
 		var n int64
 		q.Count(&n)
 		attempts = int(n)
@@ -122,8 +137,8 @@ func (a *App) ChallengeJSON(c *gin.Context) {
 	}
 	hints := []gin.H{}
 	for _, h := range ch.Hints {
-		item := gin.H{"id": h.ID, "title": h.Title, "cost": h.Cost, "unlocked": unlocked[h.ID] || (u != nil && u.IsAdmin())}
-		if unlocked[h.ID] || (u != nil && u.IsAdmin()) {
+		item := gin.H{"id": h.ID, "title": h.Title, "cost": h.Cost, "unlocked": unlocked[h.ID]}
+		if unlocked[h.ID] {
 			item["content"] = h.Content
 		}
 		hints = append(hints, item)
@@ -155,10 +170,6 @@ func (a *App) AttemptFlag(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"success": false, "errors": []string{"You have been banned"}})
 		return
 	}
-	if a.Store.IsTeams() && u.TeamID == nil {
-		c.JSON(http.StatusForbidden, gin.H{"success": false, "errors": []string{"You must join a team first"}})
-		return
-	}
 	if !a.Store.DuringCTF() && !u.IsAdmin() {
 		c.JSON(http.StatusForbidden, gin.H{"success": false, "errors": []string{"CTF is not active"}})
 		return
@@ -180,7 +191,7 @@ func (a *App) AttemptFlag(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "errors": []string{"Challenge not found"}})
 		return
 	}
-	solved := scoring.SolvedIDs(a.DB, u.ID, u.TeamID, a.Store.IsTeams())
+	solved := scoring.SolvedIDs(a.DB, u.ID, nil, false)
 	if !a.canAccessChallenge(ch, solved, u.IsAdmin()) {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "errors": []string{"Challenge not found"}})
 		return
@@ -190,12 +201,7 @@ func (a *App) AttemptFlag(c *gin.Context) {
 		return
 	}
 	if ch.MaxAttempts > 0 {
-		q := a.DB.Model(&models.Submission{}).Where("challenge_id = ? AND type = ?", ch.ID, models.SubmissionIncorrect)
-		if a.Store.IsTeams() && u.TeamID != nil {
-			q = q.Where("team_id = ?", *u.TeamID)
-		} else {
-			q = q.Where("user_id = ?", u.ID)
-		}
+		q := a.DB.Model(&models.Submission{}).Where("challenge_id = ? AND user_id = ? AND type = ?", ch.ID, u.ID, models.SubmissionIncorrect)
 		var n int64
 		q.Count(&n)
 		if int(n) >= ch.MaxAttempts {
@@ -205,14 +211,14 @@ func (a *App) AttemptFlag(c *gin.Context) {
 	}
 	ok := matchFlags(ch.Flags, provided)
 	sub := models.Submission{
-		ChallengeID: ch.ID, UserID: u.ID, TeamID: u.TeamID, IP: c.ClientIP(),
+		ChallengeID: ch.ID, UserID: u.ID, IP: c.ClientIP(),
 		Provided: provided, Date: time.Now(),
 	}
 	if ok {
 		sub.Type = models.SubmissionCorrect
 		_ = a.DB.Create(&sub).Error
 		solve := models.Solve{
-			ChallengeID: ch.ID, UserID: u.ID, TeamID: u.TeamID, IP: c.ClientIP(),
+			ChallengeID: ch.ID, UserID: u.ID, IP: c.ClientIP(),
 			Provided: provided, Date: time.Now(),
 		}
 		if err := a.DB.Create(&solve).Error; err != nil {
@@ -220,6 +226,7 @@ func (a *App) AttemptFlag(c *gin.Context) {
 			return
 		}
 		_ = scoring.RecalcChallenge(a.DB, &ch)
+		a.syncAchievement(u.ID)
 		c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"status": "correct", "message": "Correct"}})
 		return
 	}
@@ -257,10 +264,6 @@ func (a *App) UnlockHint(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "errors": []string{"Authentication required"}})
 		return
 	}
-	if a.Store.IsTeams() && u.TeamID == nil {
-		c.JSON(http.StatusForbidden, gin.H{"success": false, "errors": []string{"You must join a team first"}})
-		return
-	}
 	var body struct {
 		Target uint   `json:"target"`
 		Type   string `json:"type"`
@@ -279,12 +282,22 @@ func (a *App) UnlockHint(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "errors": []string{"Hint not found"}})
 		return
 	}
-	unlocked := scoring.UnlockedHintIDs(a.DB, u.ID, u.TeamID, a.Store.IsTeams())
+	unlocked := scoring.UnlockedHintIDs(a.DB, u.ID, nil, false)
 	if unlocked[hint.ID] {
 		c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"content": hint.Content, "cost": hint.Cost}})
 		return
 	}
-	un := models.Unlock{UserID: u.ID, TeamID: u.TeamID, Target: hint.ID, Type: models.UnlockHint, Date: time.Now()}
+	solved := scoring.SolvedIDs(a.DB, u.ID, nil, false)
+	if solved[hint.ChallengeID] {
+		c.JSON(http.StatusForbidden, gin.H{"success": false, "errors": []string{"You already solved this"}})
+		return
+	}
+	var ch models.Challenge
+	if a.DB.First(&ch, hint.ChallengeID).Error != nil || !ch.Listed() {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "errors": []string{"Hint not found"}})
+		return
+	}
+	un := models.Unlock{UserID: u.ID, Target: hint.ID, Type: models.UnlockHint, Date: time.Now()}
 	if err := a.DB.Create(&un).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "errors": []string{"Could not unlock hint"}})
 		return
@@ -308,12 +321,6 @@ func (a *App) ChallengeSolvesJSON(c *gin.Context) {
 	var data []gin.H
 	for i, s := range solves {
 		name := s.User.Name
-		if a.Store.IsTeams() && s.TeamID != nil {
-			var t models.Team
-			if a.DB.First(&t, *s.TeamID).Error == nil {
-				name = t.Name
-			}
-		}
 		if s.User.Hidden || s.User.Banned {
 			continue
 		}
@@ -323,9 +330,6 @@ func (a *App) ChallengeSolvesJSON(c *gin.Context) {
 }
 
 func (a *App) solveAccountID(s models.Solve) uint {
-	if a.Store.IsTeams() && s.TeamID != nil {
-		return *s.TeamID
-	}
 	return s.UserID
 }
 
@@ -349,7 +353,7 @@ func (a *App) FileDownload(c *gin.Context) {
 		}
 		solved := map[uint]bool{}
 		if u != nil {
-			solved = scoring.SolvedIDs(a.DB, u.ID, u.TeamID, a.Store.IsTeams())
+			solved = scoring.SolvedIDs(a.DB, u.ID, nil, false)
 		}
 		if !a.canAccessChallenge(ch, solved, u != nil && u.IsAdmin()) {
 			c.Status(http.StatusForbidden)

@@ -4,6 +4,14 @@
     window.__adDash.forEach(clearInterval);
     window.__adDash = null;
   }
+  if (window.__adPlay) {
+    clearTimeout(window.__adPlay);
+    window.__adPlay = 0;
+  }
+  if (window.__adPlayTick) {
+    clearInterval(window.__adPlayTick);
+    window.__adPlayTick = 0;
+  }
   if (window.__adDashLang) {
     document.removeEventListener("ctf:lang", window.__adDashLang);
     window.__adDashLang = null;
@@ -19,6 +27,13 @@
 
   let state = null;
   let deadline = 0;
+  let frames = null;
+  let coeffs = [];
+  let frameIndex = 0;
+  let playSpeed = 0;
+  let playUntil = 0;
+  let playTotal = 0;
+  let boardRaw = null;
   const seen = {};
   const foldKey = "ctf-fold:" + location.pathname;
   let folded = {};
@@ -26,7 +41,7 @@
   function saveFold() {
     try { sessionStorage.setItem(foldKey, JSON.stringify(folded)); } catch (e) {}
   }
-  if (!boardEl.dataset.foldBound) {
+  if (boardEl && !boardEl.dataset.foldBound) {
     boardEl.dataset.foldBound = "1";
     boardEl.addEventListener("click", function (e) {
       if (e.target.closest("a")) return;
@@ -48,10 +63,28 @@
   }
 
   try {
-    const raw = document.getElementById("ad-dashboard-data");
-    state = raw ? JSON.parse(raw.textContent || "null") : null;
+    boardRaw = document.getElementById("ad-dashboard-data");
+    state = boardRaw ? JSON.parse(boardRaw.textContent || "null") : null;
   } catch (e) {
     state = null;
+  }
+  try {
+    const packEl = document.getElementById("ad-archive-data");
+    if (packEl) {
+      const pack = JSON.parse(packEl.textContent || "{}");
+      frames = Array.isArray(pack.frames) ? pack.frames : [];
+      coeffs = Array.isArray(pack.coeffs) ? pack.coeffs : [];
+      frameIndex = frames.length ? frames.length - 1 : 0;
+      const want = Number(new URLSearchParams(location.search).get("round"));
+      if (want) {
+        frames.forEach(function (frame, i) {
+          if (frame && frame.round && Number(frame.round.number) === want) frameIndex = i;
+        });
+      }
+      if (frames.length) state = frames[frameIndex];
+    }
+  } catch (e) {
+    frames = [];
   }
 
   function esc(value) {
@@ -74,6 +107,15 @@
     if (n > 0) return "+" + n;
     if (n < 0) return "−" + Math.abs(n);
     return "0";
+  }
+
+  function scoreText(team) {
+    const score = Number(team.score) || 0;
+    const extra = Number(team.adjust) || 0;
+    const total = score + extra;
+    if (!extra) return String(total);
+    if (extra > 0) return total + " (+ " + extra + ")";
+    return total + " (- " + Math.abs(extra) + ")";
   }
 
   function slaText(cell) {
@@ -120,14 +162,14 @@
   }
 
   function render() {
-    if (!state) return;
+    if (!state || !boardEl) return;
     if (state.preparing) {
       boardEl.innerHTML = '<div class="panel p-4">' + esc(T("dash.prep")) + "</div>";
       return;
     }
     const services = state.services || [];
     const teams = state.teams || [];
-    numEl.textContent = state.round && state.round.number ? state.round.number : "—";
+    if (numEl) numEl.textContent = state.round && state.round.number ? state.round.number : "—";
     if (!teams.length) {
       boardEl.innerHTML = '<div class="panel p-4 text-muted">' + esc(T("dash.empty")) + "</div>";
       return;
@@ -152,12 +194,12 @@
       h += '<span class="ad-place p' + team.pos + '">' + team.pos + "</span>";
       h += '<span class="ad-team-text">';
       h += '<a class="ad-team-name" href="/teams/' + team.account_id + '" title="' + esc(team.name) + '">' + esc(team.name) + "</a>";
-      h += '<span class="ad-team-ip">' + esc(team.host || "—") + "</span>";
+      if (!state.archive) h += '<span class="ad-team-ip">' + esc(team.host || "—") + "</span>";
       h += "</span>";
       if (mine) h += '<span class="ad-you">' + esc(T("dash.you")) + "</span>";
       h += '<i class="bi bi-chevron-' + (closed ? "right" : "down") + ' ad-fold-icon" aria-hidden="true"></i>';
       h += "</div></td>";
-      h += '<td class="ad-col-score"><div class="ad-total" title="' + esc(breakdown(team)) + '">' + esc(num(team.score).replace("+", "")) + "</div></td>";
+      h += '<td class="ad-col-score"><div class="ad-total" title="' + esc(breakdown(team)) + '">' + esc(scoreText(team)) + "</div></td>";
       (team.services || []).forEach(function (cell) { h += cellHTML(team, cell); });
       h += "</tr>";
     });
@@ -175,7 +217,20 @@
   }
 
   function tickTimer() {
-    if (!state) return;
+    if (!state || !numEl || !leftEl || !barEl) return;
+    if (state.archive) {
+      numEl.textContent = state.round && state.round.number ? state.round.number : "—";
+      if (playSpeed && playUntil) {
+        const leftMs = Math.max(0, playUntil - Date.now());
+        const left = Math.ceil(leftMs / 1000);
+        leftEl.textContent = playSpeed + "x · " + T("attack.leftFmt").replace("{n}", left);
+        barEl.style.width = playTotal ? Math.min(100, ((playTotal - leftMs) / playTotal) * 100) + "%" : "0%";
+      } else {
+        leftEl.textContent = "";
+        barEl.style.width = "0%";
+      }
+      return;
+    }
     if (state.preparing) {
       numEl.textContent = "—";
       const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
@@ -198,6 +253,184 @@
       if (Date.now() - zeroSince < 8000) pollSoon();
     } else {
       zeroSince = 0;
+    }
+  }
+
+  function roundSeconds(frame) {
+    const n = frame && frame.round ? Number(frame.round.round_seconds) : 0;
+    return n > 0 ? n : 15;
+  }
+
+  function sameCoeff(a, b) {
+    return Number(a.attack) === Number(b.attack) && Number(a.defense) === Number(b.defense) && Number(a.lost) === Number(b.lost) && Number(a.sla) === Number(b.sla) && Number(a.down) === Number(b.down) && Number(a.round_seconds) === Number(b.round_seconds) && Number(a.flag_life) === Number(b.flag_life);
+  }
+
+  function derivedCoeffs() {
+    const out = [];
+    (frames || []).forEach(function (frame) {
+      if (!frame || !frame.rewards) return;
+      const row = {
+        round: frame.round ? frame.round.number : 0,
+        attack: frame.rewards.attack,
+        defense: frame.rewards.defense,
+        lost: frame.rewards.lost,
+        sla: frame.rewards.sla,
+        down: frame.rewards.down,
+        round_seconds: frame.round ? frame.round.round_seconds : 0,
+        flag_life: frame.flag_life || 0
+      };
+      const prev = out[out.length - 1];
+      if (prev && sameCoeff(prev, row)) return;
+      out.push(row);
+    });
+    return out;
+  }
+
+  function coeffList() {
+    return coeffs && coeffs.length ? coeffs : derivedCoeffs();
+  }
+
+  function paintRounds() {
+    const box = document.getElementById("ad-rounds");
+    if (!box || !frames) return;
+    if (!frames.length) {
+      box.innerHTML = '<span class="text-muted">' + esc(T("archive.noRounds")) + "</span>";
+      return;
+    }
+    let h = "";
+    frames.forEach(function (frame, i) {
+      const n = frame && frame.round ? frame.round.number : i + 1;
+      const on = i === frameIndex;
+      h += '<button type="button" class="btn btn-sm ' + (on ? "btn-primary" : "btn-outline-light") + '" data-frame="' + i + '">' + esc(n) + "</button>";
+    });
+    box.innerHTML = h;
+  }
+
+  function paintPlay() {
+    document.querySelectorAll("#ad-play [data-speed]").forEach(function (btn) {
+      const on = playSpeed && Number(btn.getAttribute("data-speed")) === playSpeed;
+      btn.classList.toggle("btn-primary", !!on);
+      btn.classList.toggle("btn-outline-light", !on);
+    });
+  }
+
+  function paintCoeffs() {
+    const box = document.getElementById("ad-coeffs");
+    if (!box) return;
+    const rows = coeffList();
+    if (!rows.length) {
+      box.innerHTML = "";
+      return;
+    }
+    const current = state && state.round ? Number(state.round.number) || 0 : 0;
+    let active = null;
+    rows.forEach(function (row) {
+      if (Number(row.round) <= current) active = row;
+    });
+    let h = '<div class="ad-coeffs-title">' + esc(T("archive.coeffs")) + "</div>";
+    h += '<div class="table-responsive"><table class="table table-sm ad-coeff-table mb-0"><thead><tr>';
+    h += "<th>" + esc(T("attack.round")) + "</th>";
+    h += "<th>" + esc(T("score.attack")) + "</th>";
+    h += "<th>" + esc(T("score.defense")) + "</th>";
+    h += "<th>" + esc(T("score.lost")) + "</th>";
+    h += "<th>SLA</th>";
+    h += "<th>" + esc(T("score.down")) + "</th>";
+    h += "<th>" + esc(T("admin.roundSec")) + "</th>";
+    h += "<th>" + esc(T("admin.flagLife")) + "</th>";
+    h += "</tr></thead><tbody>";
+    rows.forEach(function (row) {
+      const label = Number(row.round) > 0 ? String(row.round) : T("archive.fromStart");
+      h += '<tr class="' + (row === active ? "is-on" : "") + '">';
+      h += "<td>" + esc(label) + "</td>";
+      h += "<td>" + esc(row.attack) + "</td>";
+      h += "<td>" + esc(row.defense) + "</td>";
+      h += "<td>" + esc(row.lost) + "</td>";
+      h += "<td>" + esc(row.sla) + "</td>";
+      h += "<td>" + esc(row.down) + "</td>";
+      h += "<td>" + esc(row.round_seconds) + "</td>";
+      h += "<td>" + esc(row.flag_life) + "</td>";
+      h += "</tr>";
+    });
+    h += "</tbody></table></div>";
+    box.innerHTML = h;
+  }
+
+  function showFrame(i) {
+    if (!frames || !frames.length) return;
+    if (i < 0) i = 0;
+    if (i >= frames.length) i = frames.length - 1;
+    frameIndex = i;
+    state = frames[i];
+    setDeadline();
+    render();
+    tickTimer();
+    paintRounds();
+    paintCoeffs();
+    const n = state && state.round ? state.round.number : 0;
+    if (n) history.replaceState(null, "", location.pathname + "?round=" + n);
+  }
+
+  function stopPlay() {
+    playSpeed = 0;
+    playUntil = 0;
+    playTotal = 0;
+    if (window.__adPlay) {
+      clearTimeout(window.__adPlay);
+      window.__adPlay = 0;
+    }
+    if (window.__adPlayTick) {
+      clearInterval(window.__adPlayTick);
+      window.__adPlayTick = 0;
+    }
+    paintPlay();
+    tickTimer();
+  }
+
+  function startPlay(speed) {
+    if (!frames || !frames.length || !speed) return;
+    stopPlay();
+    playSpeed = speed;
+    paintPlay();
+    window.__adPlayTick = setInterval(tickTimer, 200);
+    function schedule() {
+      if (!playSpeed || !root.isConnected) return;
+      playTotal = Math.max(250, Math.round((roundSeconds(frames[frameIndex]) * 1000) / playSpeed));
+      playUntil = Date.now() + playTotal;
+      tickTimer();
+      window.__adPlay = setTimeout(function () {
+        if (!root.isConnected || !playSpeed) return;
+        if (frameIndex >= frames.length - 1) {
+          stopPlay();
+          return;
+        }
+        showFrame(frameIndex + 1);
+        schedule();
+      }, playTotal);
+    }
+    schedule();
+  }
+
+  function bindArchive() {
+    const rounds = document.getElementById("ad-rounds");
+    if (rounds && !rounds.dataset.bound) {
+      rounds.dataset.bound = "1";
+      rounds.addEventListener("click", function (e) {
+        const btn = e.target.closest("[data-frame]");
+        if (!btn) return;
+        stopPlay();
+        showFrame(Number(btn.getAttribute("data-frame")));
+      });
+    }
+    const play = document.getElementById("ad-play");
+    if (play && !play.dataset.bound) {
+      play.dataset.bound = "1";
+      play.addEventListener("click", function (e) {
+        const btn = e.target.closest("[data-speed]");
+        if (!btn) return;
+        const speed = Number(btn.getAttribute("data-speed"));
+        if (!speed) stopPlay();
+        else startPlay(speed);
+      });
     }
   }
 
@@ -230,10 +463,26 @@
     }
   }
 
-  setDeadline();
-  render();
-  tickTimer();
-  window.__adDash = [setInterval(tickTimer, 250), setInterval(poll, 3000)];
-  window.__adDashLang = function () { render(); tickTimer(); };
+  const live = !document.getElementById("ad-archive-data");
+  try {
+    setDeadline();
+    render();
+    tickTimer();
+    if (!live) {
+      bindArchive();
+      paintRounds();
+      paintCoeffs();
+      paintPlay();
+      const play = document.getElementById("ad-play");
+      if (play) play.hidden = !(frames && frames.length);
+    }
+  } catch (e) {
+    /* a bad first paint must not stop the clock */
+  }
+  if (live) {
+    window.__adDash = [setInterval(tickTimer, 250), setInterval(poll, 3000)];
+    poll();
+  }
+  window.__adDashLang = function () { render(); tickTimer(); paintCoeffs(); paintRounds(); };
   document.addEventListener("ctf:lang", window.__adDashLang);
 })();

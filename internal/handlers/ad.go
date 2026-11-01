@@ -77,7 +77,7 @@ func (a *App) AttackPage(c *gin.Context) {
 		"Instances": insts, "Mine": mine, "Steals": steals, "Checks": checkMap, "ServiceNames": serviceNames,
 		"Captain": captain, "Token": token, "Host": host, "FlagHint": a.flagHint(),
 		"SubmitURL":  a.requestBase(c) + "/api/v1/ad/flags",
-		"PageScript": "/static/js/attack.js?v=6", "Flashes": a.flashes(c),
+		"PageScript": "/static/js/attack.js?v=7", "Flashes": a.flashes(c),
 	})
 }
 
@@ -125,7 +125,7 @@ func (a *App) teamADToken(team *models.Team) string {
 func (a *App) AttackTokenPOST(c *gin.Context) {
 	u := middleware.CurrentUser(c)
 	var team models.Team
-	if u == nil || u.TeamID == nil || a.DB.First(&team, *u.TeamID).Error != nil {
+	if u == nil || u.Banned || u.TeamID == nil || a.DB.First(&team, *u.TeamID).Error != nil {
 		c.Redirect(http.StatusFound, "/attack")
 		return
 	}
@@ -154,8 +154,8 @@ func adError(c *gin.Context, code int, msg string) {
 }
 
 // adSubmitter resolves the team either from the X-Team-Token header (scripts)
-// or from the browser session. Token requests skip CSRF. The page sends the
-// session CSRF token with the same call.
+// or from the browser session. CSRF is skipped only for this flag route when
+// the header is set. The page sends the session CSRF token with the same call.
 func (a *App) adSubmitter(c *gin.Context) (*models.Team, uint, bool) {
 	var team models.Team
 	if tok := strings.TrimSpace(c.GetHeader("X-Team-Token")); tok != "" {
@@ -316,7 +316,7 @@ func (a *App) submitADFlag(teamID, userID uint, flag string) adFlagResult {
 
 func (a *App) AttackHostsPOST(c *gin.Context) {
 	u := middleware.CurrentUser(c)
-	if u == nil || u.TeamID == nil {
+	if u == nil || u.Banned || u.TeamID == nil {
 		c.Redirect(http.StatusFound, "/attack")
 		return
 	}
@@ -408,7 +408,7 @@ func (a *App) DashboardPage(c *gin.Context) {
 	}
 	a.HTML(c, http.StatusOK, "dashboard.html", gin.H{
 		"Title": "Dashboard", "Board": a.dashboardData(u),
-		"PageScript": "/static/js/dashboard.js?v=7", "Flashes": a.flashes(c),
+		"PageScript": "/static/js/dashboard.js?v=10", "Flashes": a.flashes(c),
 	})
 }
 
@@ -524,8 +524,15 @@ func (a *App) AdminAD(c *gin.Context) {
 	for _, s := range services {
 		serviceNames[s.ID] = s.Name
 	}
+	adjusts := map[uint]int{}
+	var adjustRows []models.ADAdjust
+	a.DB.Find(&adjustRows)
+	for _, row := range adjustRows {
+		adjusts[row.TeamID] = row.Points
+	}
 	a.HTML(c, http.StatusOK, "admin_ad.html", gin.H{
 		"Title": "Attack-Defense", "Admin": true, "Services": services, "Checkers": checkers, "Teams": teams,
+		"Running": a.Store.IsAD(), "Adjusts": adjusts,
 		"Instances": insts, "Hosts": rows, "Round": round, "Checks": checks, "Steals": steals,
 		"TeamNames": teamNames, "TeamHosts": teamHosts, "ServiceNames": serviceNames, "Rewards": a.Store.ADRewards(),
 		"Paused": a.Store.ADPaused(), "RoundSeconds": a.Store.ADRoundSeconds(),
@@ -555,6 +562,9 @@ func (a *App) AdminADConfigPOST(c *gin.Context) {
 		"ad_sla_reward":           strconv.Itoa(formInt(c, "ad_sla_reward", base.SLA)),
 		"ad_down_penalty":         strconv.Itoa(formInt(c, "ad_down_penalty", base.Down)),
 	})
+	if id := uint(a.Store.Int("ad_event_id", 0)); a.Store.IsAD() && id != 0 {
+		a.rememberCoeffs(id, a.coeffRound())
+	}
 	a.dropADCache()
 	a.flash(c, "success", "Attack-Defense settings saved")
 	c.Redirect(http.StatusFound, "/admin/ad")
@@ -570,43 +580,6 @@ func nextPrepStart(prevMinutes int, prevStart string, minutes int, now time.Time
 		return strings.TrimSpace(prevStart)
 	}
 	return now.UTC().Format(time.RFC3339)
-}
-
-func clockInput(t *time.Time, loc *time.Location) string {
-	if t == nil {
-		return ""
-	}
-	if loc == nil {
-		loc = time.UTC
-	}
-	return t.In(loc).Format("2006-01-02T15:04")
-}
-
-func clockValue(raw string, loc *time.Location) string {
-	t := parseClock(raw, loc)
-	if t == nil {
-		return ""
-	}
-	return t.UTC().Format(time.RFC3339)
-}
-
-func parseClock(raw string, loc *time.Location) *time.Time {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil
-	}
-	if loc == nil {
-		loc = time.UTC
-	}
-	if t, err := time.Parse(time.RFC3339, raw); err == nil {
-		return &t
-	}
-	for _, layout := range []string{"2006-01-02T15:04", "2006-01-02 15:04:05", "2006-01-02 15:04"} {
-		if t, err := time.ParseInLocation(layout, raw, loc); err == nil {
-			return &t
-		}
-	}
-	return nil
 }
 
 func loadZone(name string) (*time.Location, string, error) {

@@ -15,7 +15,6 @@
       <div class="col-md-8"><input class="form-control" type="file" name="archive" accept=".zip,application/zip" required></div>
       <div class="col-md-4"><button class="btn btn-success w-100" type="submit" data-i18n="admin.import">Import and deploy</button></div>
     </div>
-    <p class="text-muted small mb-0 mt-2" data-i18n="admin.uploadHint">task.yml or README.md. If docker-compose.yml is inside, the task is built and started automatically.</p>
   </form>
   <div class="table-responsive">
   <table class="table table-hover">
@@ -28,6 +27,7 @@
       <th data-i18n="admin.state">State</th>
       <th data-i18n="admin.deploy">Deploy</th>
       <th data-i18n="admin.solves">Solves</th>
+      <th></th>
     </tr></thead>
     <tbody>
       {{range .Challenges}}
@@ -42,9 +42,22 @@
           <span class="deploy-status badge-status {{if .DeployStatus}}badge-{{.DeployStatus}}{{end}}" data-deploy-kind="challenge" data-deploy-id="{{.ID}}" {{if .DeployStatus}}data-i18n="deploy.{{.DeployStatus}}"{{end}}>{{if .DeployStatus}}{{.DeployStatus}}{{else}}—{{end}}</span>
         </td>
         <td>{{index $.SolveCounts .ID}}</td>
+        <td>
+          <div class="d-flex flex-wrap gap-1">
+            {{if .ComposeDir}}
+            <form method="post" action="/admin/challenges/{{.ID}}/redeploy"><input type="hidden" name="nonce" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-light" type="submit" data-i18n="admin.redeploy">Redeploy</button></form>
+            {{end}}
+            {{if eq .State "visible"}}
+            <form method="post" action="/admin/challenges/{{.ID}}/hide"><input type="hidden" name="nonce" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-warning" type="submit" data-i18n="admin.hide">Hide</button></form>
+            {{else}}
+            <form method="post" action="/admin/challenges/{{.ID}}/show"><input type="hidden" name="nonce" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-light" type="submit" data-i18n="admin.show">Show</button></form>
+            {{end}}
+            <form method="post" action="/admin/challenges/{{.ID}}/delete" data-confirm="confirm.deleteChallenge"><input type="hidden" name="nonce" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger" type="submit" data-i18n="delete">delete</button></form>
+          </div>
+        </td>
       </tr>
       <tr>
-        <td colspan="8">
+        <td colspan="9">
           <details class="deploy-details">
             <summary data-i18n="admin.log">Build log</summary>
             <pre class="deploy-log" data-deploy-log="challenge" data-deploy-id="{{.ID}}">{{.DeployLog}}</pre>

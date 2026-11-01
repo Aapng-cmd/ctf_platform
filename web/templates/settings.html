@@ -4,38 +4,42 @@
 <main class="auth-shell">
   <div class="auth-card">
   <h2 data-i18n="settings.title">Settings</h2>
-  <form method="post">
+  <form method="post" enctype="multipart/form-data">
     <input type="hidden" name="nonce" value="{{.CSRF}}">
+    <div class="mb-3">
+      <label class="form-label" data-i18n="settings.login">Login</label>
+      <input class="form-control" name="name" value="{{.User.Name}}" required maxlength="128">
+    </div>
     <div class="mb-3">
       <label class="form-label" data-i18n="settings.email">Email</label>
       <input class="form-control" type="email" name="email" value="{{.User.Email}}">
     </div>
-    <div class="mb-3" hidden>
-      <label class="form-label" data-i18n="Website">Website</label>
-      <input class="form-control" name="website" value="{{.User.Website}}">
-    </div>
-    <div class="mb-3" hidden>
-      <label class="form-label" data-i18n="Affiliation">Affiliation</label>
-      <input class="form-control" name="affiliation" value="{{.User.Affiliation}}">
-    </div>
-    <div class="mb-3" hidden>
-      <label class="form-label" data-i18n="Country">Country</label>
-      <select class="form-select" name="country">
-        <option value=""></option>
-        {{range .Countries}}<option value="{{.Code}}" {{if eq $.User.Country .Code}}selected{{end}}>{{.Name}}</option>{{end}}
-      </select>
+    <div class="mb-3">
+      <label class="form-label" data-i18n="settings.picture">Picture</label>
+      {{if .User.Avatar}}<div class="avatar-frame avatar-frame-sm mb-2"><img src="/avatars/{{.User.ID}}?v={{.User.Avatar}}" alt=""></div>{{end}}
+      <input class="form-control" id="avatar-file" type="file" name="avatar" accept="image/png,image/jpeg">
     </div>
     <hr>
     <div class="mb-3">
-      <label class="form-label" data-i18n="settings.password">New Password</label>
-      <input class="form-control" type="password" name="password">
+      <label class="form-label" data-i18n="settings.password">New password</label>
+      <input class="form-control" type="password" name="password" autocomplete="new-password">
     </div>
     <div class="mb-3">
-      <label class="form-label" data-i18n="settings.confirm">Confirm Current Password</label>
-      <input class="form-control" type="password" name="confirm">
+      <label class="form-label" data-i18n="settings.confirm">Current password</label>
+      <input class="form-control" type="password" name="confirm" autocomplete="current-password">
     </div>
     <button class="btn btn-primary w-100" type="submit" data-i18n="settings.update">Update</button>
   </form>
   </div>
+  <dialog id="avatar-crop" class="avatar-dialog">
+    <div class="avatar-stage">
+      <img alt="">
+      <div class="avatar-box"><span class="avatar-handle"></span></div>
+    </div>
+    <div class="ctf-dialog-actions">
+      <button type="button" class="btn btn-outline-light" data-crop-cancel data-i18n="dialog.cancel">Cancel</button>
+      <button type="button" class="btn btn-primary" data-crop-ok data-i18n="dialog.ok">Confirm</button>
+    </div>
+  </dialog>
 </main>
 {{template "footer" .}}

@@ -85,17 +85,20 @@ func (a *App) deployChallenge(id uint) {
 	a.DB.Model(&ch).Update("deploy_status", "building")
 	log, err := tasks.UpNotify(ch.ComposeDir, a.deployProgress("challenges", id))
 	status := "running"
-	state := models.StateVisible
+	fields := map[string]any{"deploy_status": status, "deploy_log": log, "state": models.StateVisible}
 	if err != nil {
-		status = "failed"
-		state = models.StateHidden
-		log = err.Error() + "\n" + log
+		fields["deploy_status"] = "failed"
+		fields["deploy_log"] = err.Error() + "\n" + log
+		if ch.State != models.StateVisible {
+			fields["state"] = models.StateHidden
+		} else {
+			delete(fields, "state")
+		}
 	}
-	a.DB.Model(&ch).Updates(map[string]any{
-		"deploy_status": status,
-		"deploy_log":    log,
-		"state":         state,
-	})
+	a.DB.Model(&ch).Updates(fields)
+	if err == nil {
+		a.syncChallengeSolvers(id)
+	}
 }
 
 func (a *App) AdminChallengeRedeploy(c *gin.Context) {
@@ -107,18 +110,86 @@ func (a *App) AdminChallengeRedeploy(c *gin.Context) {
 
 func (a *App) AdminChallengeStop(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
+	a.challengeHide(c, "/admin/challenges/"+strconv.Itoa(id))
+}
+
+func (a *App) AdminChallengeHide(c *gin.Context) {
+	a.challengeHide(c, "/admin/challenges")
+}
+
+func (a *App) AdminChallengeShow(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
 	var ch models.Challenge
-	if a.DB.First(&ch, id).Error == nil && ch.ComposeDir != "" {
-		log, err := tasks.Down(ch.ComposeDir)
-		status := "stopped"
-		if err != nil {
-			status = "failed"
-			log = err.Error() + "\n" + log
-		}
-		a.DB.Model(&ch).Updates(map[string]any{"deploy_status": status, "deploy_log": log, "state": models.StateHidden})
+	if a.DB.First(&ch, id).Error != nil {
+		c.Redirect(http.StatusFound, "/admin/challenges")
+		return
 	}
-	a.flash(c, "success", "Challenge containers stopped")
-	c.Redirect(http.StatusFound, "/admin/challenges/"+strconv.Itoa(id))
+	if strings.TrimSpace(ch.ComposeDir) != "" && dirExists(ch.ComposeDir) {
+		go a.deployChallenge(ch.ID)
+		a.flash(c, "success", "Challenge opening")
+		c.Redirect(http.StatusFound, "/admin/challenges")
+		return
+	}
+	a.DB.Model(&ch).Update("state", models.StateVisible)
+	a.syncChallengeSolvers(ch.ID)
+	a.flash(c, "success", "Challenge is open")
+	c.Redirect(http.StatusFound, "/admin/challenges")
+}
+
+func (a *App) challengeHide(c *gin.Context, next string) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	var ch models.Challenge
+	if a.DB.First(&ch, id).Error != nil {
+		c.Redirect(http.StatusFound, next)
+		return
+	}
+	if err := a.hideChallengeStack(&ch); err != nil {
+		a.flash(c, "danger", "Could not stop the challenge")
+		c.Redirect(http.StatusFound, next)
+		return
+	}
+	fields := map[string]any{"state": models.StateHidden}
+	if strings.TrimSpace(ch.ComposeDir) != "" {
+		fields["deploy_status"] = "stopped"
+	}
+	a.DB.Model(&ch).Updates(fields)
+	a.syncChallengeSolvers(ch.ID)
+	a.flash(c, "success", "Challenge hidden")
+	c.Redirect(http.StatusFound, next)
+}
+
+// hideChallengeStack runs docker compose down for a Jeopardy task. Volumes stay.
+func (a *App) hideChallengeStack(ch *models.Challenge) error {
+	if ch == nil || strings.TrimSpace(ch.ComposeDir) == "" || !dirExists(ch.ComposeDir) {
+		return nil
+	}
+	log, err := tasks.DownTask(ch.ComposeDir)
+	status := "stopped"
+	if err != nil {
+		status = "failed"
+		log = err.Error() + "\n" + log
+	}
+	a.DB.Model(ch).Updates(map[string]any{"deploy_status": status, "deploy_log": log})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// removeChallengeStack runs docker compose down -v and prunes that project's leftovers.
+func (a *App) removeChallengeStack(ch *models.Challenge) error {
+	if ch == nil || strings.TrimSpace(ch.ComposeDir) == "" || !dirExists(ch.ComposeDir) {
+		return nil
+	}
+	log, err := tasks.DownPrune(ch.ComposeDir)
+	if err != nil {
+		a.DB.Model(ch).Updates(map[string]any{
+			"deploy_status": "failed",
+			"deploy_log":    err.Error() + "\n" + log,
+		})
+		return err
+	}
+	return nil
 }
 
 func (a *App) AdminADUpload(c *gin.Context) {
@@ -264,16 +335,24 @@ func (a *App) StopDeployedTasks() {
 		wg.Add(1)
 		go func(dir string) {
 			defer wg.Done()
-			logText, err := tasks.Down(dir)
+			taskLog, taskErr := tasks.DownTask(dir)
+			checkLog, checkErr := tasks.DownChecker(dir)
+			logText := strings.TrimSpace(taskLog + "\n" + checkLog)
+			err := taskErr
+			if err == nil {
+				err = checkErr
+			}
 			status := "stopped"
 			if err != nil {
 				status = "failed"
 				logText = err.Error() + "\n" + logText
 			}
 			note := shutdownNote + "\n" + logText
-			a.DB.Model(&models.Challenge{}).Where("compose_dir = ?", dir).Updates(map[string]any{
-				"deploy_status": status, "deploy_log": note, "state": models.StateHidden,
-			})
+			fields := map[string]any{"deploy_status": status, "deploy_log": note}
+			if err == nil {
+				fields["state"] = models.StateHidden
+			}
+			a.DB.Model(&models.Challenge{}).Where("compose_dir = ?", dir).Updates(fields)
 			a.DB.Model(&models.ADService{}).Where("compose_dir = ?", dir).Updates(map[string]any{
 				"deploy_status": status, "deploy_log": note, "active": false,
 			})

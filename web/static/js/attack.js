@@ -24,6 +24,7 @@
   }
 
   function tickTimer() {
+    if (!roundEl || !leftEl) return;
     if (state.preparing) {
       roundEl.textContent = "—";
       const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
@@ -129,7 +130,11 @@
 
   window.__adAttackLang = function () { tickTimer(); };
   document.addEventListener("ctf:lang", window.__adAttackLang);
-  tickTimer();
+  try {
+    tickTimer();
+  } catch (e) {
+    /* a bad first paint must not stop the clock */
+  }
   window.__adAttack = [setInterval(tickTimer, 250), setInterval(poll, 3000)];
   poll();
 })();

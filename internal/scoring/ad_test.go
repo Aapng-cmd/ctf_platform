@@ -117,3 +117,44 @@ func TestADDownPenaltyScalesWithOpponents(t *testing.T) {
 	}
 	t.Fatal("team not found")
 }
+
+func TestAdminPointsStayOutOfSLA(t *testing.T) {
+	db := adDB(t)
+	if err := db.AutoMigrate(&models.ADAdjust{}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	svc := models.ADService{Name: "svc", Active: true}
+	db.Create(&svc)
+	alpha := models.Team{Name: "alpha"}
+	bravo := models.Team{Name: "bravo"}
+	db.Create(&alpha)
+	db.Create(&bravo)
+	db.Create(&models.ADInstance{TeamID: alpha.ID, ServiceID: svc.ID, Host: "10.0.0.1", Port: 1})
+	db.Create(&models.ADInstance{TeamID: bravo.ID, ServiceID: svc.ID, Host: "10.0.0.2", Port: 1})
+	r := models.ADRound{Number: 1, Started: now}
+	db.Create(&r)
+	db.Create(&models.ADCheck{RoundID: r.ID, ServiceID: svc.ID, TeamID: alpha.ID, Status: models.CheckOK, Date: now})
+	db.Create(&models.ADCheck{RoundID: r.ID, ServiceID: svc.ID, TeamID: bravo.ID, Status: models.CheckOK, Date: now})
+	db.Create(&models.ADAdjust{TeamID: alpha.ID, Points: 50})
+	db.Create(&models.ADAdjust{TeamID: bravo.ID, Points: -3})
+
+	board := ADDashboard(db, nil, false, models.DefaultADRewards())
+	by := map[string]ADStanding{}
+	for _, st := range board.Teams {
+		by[st.Name] = st
+	}
+	a, b := by["alpha"], by["bravo"]
+	if a.SLA != models.ADDefaultSLAReward || a.Adjust != 50 || a.Score != a.SLA {
+		t.Fatalf("alpha score=%d sla=%d adjust=%d", a.Score, a.SLA, a.Adjust)
+	}
+	if b.Adjust != -3 || b.SLA != a.SLA {
+		t.Fatalf("bravo adjust=%d sla=%d", b.Adjust, b.SLA)
+	}
+	if a.ScoreLabel() != "52 (+ 50)" || b.ScoreLabel() != "-1 (- 3)" {
+		t.Fatalf("labels %q %q", a.ScoreLabel(), b.ScoreLabel())
+	}
+	if board.Teams[0].Name != "alpha" {
+		t.Fatalf("place order %s", board.Teams[0].Name)
+	}
+}

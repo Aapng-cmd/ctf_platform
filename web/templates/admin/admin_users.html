@@ -5,6 +5,16 @@
 <main class="admin-main">
   {{template "flashes" .}}
   <h2 data-i18n="Users">Users</h2>
+  <form method="post" action="/admin/users" class="panel p-3 mb-4">
+    <input type="hidden" name="nonce" value="{{.CSRF}}">
+    <h5 data-i18n="New admin">New admin</h5>
+    <div class="row g-2">
+      <div class="col-md-3"><input class="form-control" name="name" required maxlength="128" placeholder="Name" data-i18n-placeholder="Name"></div>
+      <div class="col-md-4"><input class="form-control" type="email" name="email" required placeholder="Email" data-i18n-placeholder="Email"></div>
+      <div class="col-md-3"><input class="form-control" type="password" name="password" required minlength="6" autocomplete="new-password" placeholder="Password" data-i18n-placeholder="Password"></div>
+      <div class="col-md-2"><button class="btn btn-primary w-100" type="submit" data-i18n="Create">Create</button></div>
+    </div>
+  </form>
   <table class="table table-hover">
     <thead><tr><th>ID</th><th data-i18n="Name">Name</th><th data-i18n="Email">Email</th><th data-i18n="Type">Type</th><th data-i18n="Team">Team</th><th data-i18n="Hidden">Hidden</th><th data-i18n="Banned">Banned</th></tr></thead>
     <tbody>

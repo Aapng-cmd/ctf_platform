@@ -5,13 +5,24 @@
 <main class="admin-main" data-deploy-poll>
   {{template "flashes" .}}
   <h2 data-i18n="admin.adTitle">Attack-Defense</h2>
-  <p class="text-muted" data-i18n="admin.adHint">Start a checker, create a service with that checker, a name and a port, then set each team's host. The service is placed on every host at that port. One checker serves every team; each team gets its own flags.</p>
+  <div class="d-flex gap-2 mb-3">
+    {{if .Running}}
+    <form method="post" action="/admin/ad/stop" data-confirm="confirm.stopAD">
+      <input type="hidden" name="nonce" value="{{.CSRF}}">
+      <button class="btn btn-danger" type="submit" data-i18n="admin.adStop">Stop</button>
+    </form>
+    {{else}}
+    <form method="post" action="/admin/ad/start">
+      <input type="hidden" name="nonce" value="{{.CSRF}}">
+      <button class="btn btn-success" type="submit" data-i18n="admin.adStart">Start</button>
+    </form>
+    {{end}}
+  </div>
 
   <h4 data-i18n="admin.checkers">Checkers</h4>
   <form method="post" action="/admin/ad/upload" enctype="multipart/form-data" class="panel p-3 mb-4">
     <input type="hidden" name="nonce" value="{{.CSRF}}">
     <label class="form-label" data-i18n="admin.adUpload">Checker archive</label>
-    <p class="text-muted small" data-i18n="admin.checkerHint">The zip contains only the checker. The vulnerable service is not started.</p>
     <div class="row g-2 align-items-center">
       <div class="col-md-8"><input class="form-control" type="file" name="archive" accept=".zip,application/zip" required></div>
       <div class="col-md-4"><button class="btn btn-success w-100" type="submit" data-i18n="admin.startChecker">Start checker</button></div>
@@ -67,7 +78,6 @@
     <div>
       <label class="form-label" data-i18n="admin.prepMinutes">Preparation (minutes)</label>
       <input class="form-control" name="ad_prep_minutes" value="{{.PrepMinutes}}" inputmode="numeric">
-      <div class="form-text" data-i18n="admin.prepHint">The window starts when you save. Zero turns it off.</div>
     </div>
     <div>
       <label class="form-label" data-i18n="pts.attack">Attack</label>
@@ -97,11 +107,9 @@
     </div>
     <div><button class="btn btn-primary w-100" type="submit" data-i18n="admin.save">Save</button></div>
   </form>
-  <p class="text-muted small" data-i18n="admin.scoringHint">Stolen flag: the attacker gets Attack, the victim loses Lost flag. A flag that lived its whole lifetime on a working service and was not stolen gives Defense. Every OK round gives SLA. Every round a service is DOWN, MUMBLE, CORRUPT or has no host costs Down × number of opponents, so a dead service costs more than being robbed by every team. These points are the same for every service.</p>
   {{if .Round}}<p><span data-i18n="admin.currentRound">Current round</span>: <strong>{{.Round.Number}}</strong> · {{formatDate .Round.Started}}</p>{{end}}
 
   <h4 class="mt-4" data-i18n="admin.services">Services</h4>
-  <p class="text-muted" data-i18n="admin.serviceHint">Name, port and a checker that is already running. The same port is used on every team's host. Name, port and checker can be changed after the service exists.</p>
   <form method="post" action="/admin/ad/services" class="field-grid mb-3">
     <input type="hidden" name="nonce" value="{{.CSRF}}">
     <div><label class="form-label small" data-i18n="admin.name">Name</label><input class="form-control" name="name" required></div>
@@ -154,8 +162,27 @@
   </table>
   </div>
 
+  {{if .Running}}
+  <h4 class="mt-4" data-i18n="admin.points">Points</h4>
+  <form method="post" action="/admin/ad/adjust" class="field-grid mb-4">
+    <input type="hidden" name="nonce" value="{{.CSRF}}">
+    <div>
+      <label class="form-label" data-i18n="score.team">Team</label>
+      <select class="form-select" name="team_id" required>
+        {{range .Teams}}{{if not .Banned}}
+        <option value="{{.ID}}">{{.Name}}{{$n := index $.Adjusts .ID}}{{if $n}} ({{signed $n}}){{end}}</option>
+        {{end}}{{end}}
+      </select>
+    </div>
+    <div>
+      <label class="form-label" data-i18n="admin.points">Points</label>
+      <input class="form-control" type="number" name="points" required>
+    </div>
+    <div><button class="btn btn-primary w-100" type="submit" data-i18n="admin.save">Save</button></div>
+  </form>
+  {{end}}
+
   <h4 class="mt-4" data-i18n="admin.hosts">Team hosts</h4>
-  <p class="text-muted" data-i18n="admin.hostsHint">One address per team. Every service is placed on that address at the service's own port. Teams with the same service share the checker and the port, and differ by host.</p>
   {{if .Paused}}<div class="alert alert-warning" data-i18n="admin.pausedFlags">The engine is paused, so the checker is not sending flags.</div>{{end}}
   <form method="post" action="/admin/ad/hosts" class="mb-3">
     <input type="hidden" name="nonce" value="{{.CSRF}}">

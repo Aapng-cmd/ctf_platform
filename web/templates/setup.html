@@ -14,26 +14,9 @@
       <label class="form-label" data-i18n="Event Description">Event Description</label>
       <textarea class="form-control" name="ctf_description" rows="3"></textarea>
     </div>
-    <h5 class="mt-4" data-i18n="Mode">Mode</h5>
-    <div class="mb-3">
-      <label class="form-label" data-i18n="Game type">Game type</label>
-      <select class="form-select" name="game_mode">
-        <option value="jeopardy" data-i18n="Jeopardy">Jeopardy</option>
-        <option value="attack_defense" data-i18n="Attack-Defense">Attack-Defense</option>
-        <option value="mixed" data-i18n="Mixed (Jeopardy + Attack-Defense)">Mixed (Jeopardy + Attack-Defense)</option>
-      </select>
-    </div>
-    <div class="mb-3">
-      <label class="form-label" data-i18n="Accounts">Accounts</label>
-      <select class="form-select" name="user_mode">
-        <option value="users" data-i18n="Users">Users</option>
-        <option value="teams" data-i18n="Teams (required for Attack-Defense)">Teams (required for Attack-Defense)</option>
-      </select>
-    </div>
     <div class="mb-3">
       <label class="form-label" data-i18n="Timezone">Timezone</label>
       {{template "tzselect" "UTC"}}
-      <div class="form-text" data-i18n="config.timezoneHint">Everyone sees event times in this timezone.</div>
     </div>
     <h5 class="mt-4" data-i18n="Administration">Administration</h5>
     <div class="mb-3">

@@ -1,0 +1,29 @@
+{{template "head" .}}
+{{template "navbar" .}}
+{{template "flashes" .}}
+<main class="container py-4">
+  <h2 data-i18n="archive.title">Archive</h2>
+  <div class="table-responsive">
+  <table class="table table-sm align-middle">
+    <thead><tr><th data-i18n="admin.time">Time</th><th></th></tr></thead>
+    <tbody>
+      {{range .Events}}
+      <tr>
+        <td><a href="/archive/{{.ID}}">{{formatDate .Started}}{{if .Ended}} — {{formatDate .Ended}}{{end}}</a></td>
+        <td class="text-end">
+          {{if $.User}}{{if $.User.IsAdmin}}
+          <form method="post" action="/admin/ad/archive/{{.ID}}/delete" data-confirm="confirm.deleteArchive">
+            <input type="hidden" name="nonce" value="{{$.CSRF}}">
+            <button class="btn btn-sm btn-outline-danger" type="submit" data-i18n="admin.delete">Delete</button>
+          </form>
+          {{end}}{{end}}
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="2" class="text-muted" data-i18n="archive.empty">No finished events.</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  </div>
+</main>
+{{template "footer" .}}

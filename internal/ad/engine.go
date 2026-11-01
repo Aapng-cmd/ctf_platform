@@ -2,8 +2,11 @@ package ad
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -35,8 +38,13 @@ func New(db *gorm.DB, st *store.Store, fl flags.Store) *Engine {
 		DB:    db,
 		Store: st,
 		Flags: fl,
-		http:  &http.Client{Timeout: 30 * time.Second},
-		stop:  make(chan struct{}),
+		http: &http.Client{
+			Timeout: 30 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
+		stop: make(chan struct{}),
 	}
 }
 
@@ -196,20 +204,34 @@ func (e *Engine) resolveChecker(inst *models.ADInstance) string {
 	return url
 }
 
+// dialHost resolves a team address and returns the IP a checker may dial.
+func dialHost(host string) (string, string) {
+	ip, err := webutil.ResolveServiceHost(context.Background(), host)
+	if err == nil {
+		return ip.String(), ""
+	}
+	if errors.Is(err, webutil.ErrHostDenied) {
+		return "", "host is not allowed"
+	}
+	return "", "connection failed"
+}
+
 func (e *Engine) plant(inst models.ADInstance, fl models.ADFlag) (string, string) {
 	host := strings.TrimSpace(inst.Host)
 	if host == "" {
 		return models.CheckDown, models.ADNoHostMessage
 	}
-	if !webutil.AllowedServiceHost(host) {
-		return models.CheckDown, "host is not allowed"
+	host, why := dialHost(host)
+	if host == "" {
+		return models.CheckDown, why
 	}
+	inst.Host = host
 	port := inst.Port
 	if port == 0 {
 		port = inst.Service.Port
 	}
 	target := host
-	if port > 0 && !strings.Contains(host, ":") {
+	if port > 0 {
 		target = net.JoinHostPort(host, fmt.Sprintf("%d", port))
 	}
 	if url := e.resolveChecker(&inst); url != "" {
@@ -308,6 +330,7 @@ func (e *Engine) runChecks(round *models.ADRound) {
 	})
 	_ = e.DB.Model(round).Update("checks_done", true).Error
 	round.ChecksDone = true
+	CaptureRound(e.DB, e.Store, e.Flags, round.Number)
 }
 
 // parallel runs fn over n items, at most 16 at a time.
@@ -381,9 +404,11 @@ func (e *Engine) check(inst models.ADInstance, fl models.ADFlag) (string, string
 	if host == "" {
 		return models.CheckDown, models.ADNoHostMessage
 	}
-	if !webutil.AllowedServiceHost(host) {
-		return models.CheckDown, "host is not allowed"
+	host, why := dialHost(host)
+	if host == "" {
+		return models.CheckDown, why
 	}
+	inst.Host = host
 	if fl.PutStatus == models.CheckError {
 		return models.CheckError, fl.PutMessage
 	}
@@ -391,7 +416,7 @@ func (e *Engine) check(inst models.ADInstance, fl models.ADFlag) (string, string
 		return fl.PutStatus, "flag put failed: " + fl.PutMessage
 	}
 	target := host
-	if port > 0 && !strings.Contains(host, ":") {
+	if port > 0 {
 		target = net.JoinHostPort(host, fmt.Sprintf("%d", port))
 	}
 	if url := e.resolveChecker(&inst); url != "" {
@@ -433,7 +458,8 @@ func (e *Engine) postChecker(url, action string, inst models.ADInstance, flag st
 	})
 	res, err := e.http.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
-		return models.CheckError, "checker unavailable: " + err.Error()
+		log.Printf("checker: %v", err)
+		return models.CheckError, "checker unavailable"
 	}
 	defer res.Body.Close()
 	var out checkerResp

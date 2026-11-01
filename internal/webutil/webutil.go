@@ -2,8 +2,10 @@ package webutil
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"html/template"
 	"net"
 	"net/url"
@@ -39,7 +41,19 @@ func HashPassword(pw string) (string, error) {
 	return string(b), err
 }
 
+// fallbackHash keeps a missing account on the same bcrypt cost as a real one.
+var fallbackHash = func() string {
+	b, err := bcrypt.GenerateFromPassword([]byte("ctf-platform-unmatched"), bcrypt.DefaultCost)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}()
+
 func CheckPassword(hash, pw string) bool {
+	if hash == "" {
+		hash = fallbackHash
+	}
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(pw)) == nil
 }
 
@@ -107,10 +121,7 @@ func AllowedServiceHost(host string) bool {
 		return false
 	}
 	if ip := net.ParseIP(host); ip != nil {
-		if ip.IsLoopback() || ip.IsUnspecified() || ip.IsMulticast() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
-			return false
-		}
-		return true
+		return ipAllowed(ip)
 	}
 	for _, label := range strings.Split(host, ".") {
 		if label == "" || len(label) > 63 || strings.HasPrefix(label, "-") || strings.HasSuffix(label, "-") {
@@ -124,6 +135,69 @@ func AllowedServiceHost(host string) bool {
 		}
 	}
 	return true
+}
+
+var (
+	ErrHostDenied      = errors.New("host denied")
+	ErrHostUnreachable = errors.New("host unreachable")
+)
+
+// lookupHostIPs is replaced in tests. Production uses the system resolver.
+var lookupHostIPs = func(ctx context.Context, host string) ([]net.IP, error) {
+	return net.DefaultResolver.LookupIP(ctx, "ip", host)
+}
+
+func unmapIP(ip net.IP) net.IP {
+	if ip == nil {
+		return nil
+	}
+	if v4 := ip.To4(); v4 != nil {
+		return v4
+	}
+	return ip
+}
+
+func ipAllowed(ip net.IP) bool {
+	ip = unmapIP(ip)
+	if ip == nil {
+		return false
+	}
+	return !ip.IsLoopback() && !ip.IsUnspecified() && !ip.IsMulticast() && !ip.IsLinkLocalUnicast() && !ip.IsLinkLocalMulticast()
+}
+
+// ResolveServiceHost checks a team address before a checker dials it.
+// A hostname is resolved first. Loopback and link-local answers are rejected,
+// and the returned IP is what the checker should dial.
+func ResolveServiceHost(ctx context.Context, host string) (net.IP, error) {
+	host = strings.TrimSpace(host)
+	if !AllowedServiceHost(host) {
+		return nil, ErrHostDenied
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return unmapIP(ip), nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	ips, err := lookupHostIPs(cctx, host)
+	if err != nil || len(ips) == 0 {
+		return nil, ErrHostUnreachable
+	}
+	var first net.IP
+	for _, ip := range ips {
+		if !ipAllowed(ip) {
+			return nil, ErrHostDenied
+		}
+		if first == nil {
+			first = ip
+		}
+	}
+	if first == nil {
+		return nil, ErrHostUnreachable
+	}
+	return unmapIP(first), nil
 }
 
 // UploadPath joins a stored file name onto the upload directory and rejects traversal.

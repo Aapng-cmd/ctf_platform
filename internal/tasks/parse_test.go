@@ -240,7 +240,26 @@ func TestReadmeFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if spec.Name != "Crypto box" || spec.Category != "Crypto" || spec.Value != 200 || spec.Flag != "flag{readme}" || len(spec.Hints) != 1 {
+	if spec.Name != "Crypto box" || spec.Category != "Криптография" || spec.Value != 200 || spec.Flag != "flag{readme}" || len(spec.Hints) != 1 {
 		t.Fatalf("%+v", spec)
+	}
+}
+
+func TestHintsJSONReplacesReadmeHints(t *testing.T) {
+	dir := t.TempDir()
+	readme := "# Crypto box\n\n## Category\nCrypto\n\n## Description\nDecrypt it\n\n## Cost\n200\n\n## Flag\nflag{readme}\n\n## Hints\nlook closer|15\n"
+	hints := "{\n  \"hints\": [\n    { \"hint\": \"Read it again.\", \"cost\": 5 },\n    { \"hint\": \" \", \"cost\": 10 },\n    { \"hint\": \"Too much\", \"cost\": -3 }\n  ]\n}\n"
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte(readme), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "hints.json"), []byte(hints), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	spec, err := ParseJeopardy(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spec.Hints) != 2 || spec.Hints[0].Content != "Read it again." || spec.Hints[0].Cost != 5 || spec.Hints[1].Cost != 0 {
+		t.Fatalf("%+v", spec.Hints)
 	}
 }

@@ -1,45 +1,72 @@
 {{template "head" .}}
 {{template "navbar" .}}
 {{template "flashes" .}}
-<main class="container py-4">
-  <div class="row">
-    <div class="col-md-4 mb-4">
-      <div class="card profile-card">
-        <div class="card-body">
-          <h3>{{.Profile.Name}}</h3>
-          {{if .Place}}<p class="mb-1"><span data-i18n="Place:">Place:</span> <strong>{{.Place}}</strong></p>{{end}}
-          <p class="mb-1"><span data-i18n="Score:">Score:</span> <strong>{{.Score}}</strong></p>
-          {{if .Profile.Affiliation}}<p class="mb-1" hidden>{{.Profile.Affiliation}}</p>{{end}}
-          {{if .Profile.Country}}<p class="mb-1" hidden data-country="{{.Profile.Country}}">{{countryName .Profile.Country}}</p>{{end}}
-          {{if .Profile.Website}}<p hidden><a href="{{.Profile.Website}}">{{.Profile.Website}}</a></p>{{end}}
-          {{if .Profile.Team}}<p><span data-i18n="Team:">Team:</span> <a href="/teams/{{.Profile.Team.ID}}">{{.Profile.Team.Name}}</a></p>{{end}}
-        </div>
-      </div>
+<main class="container py-4 profile-page">
+  <section class="profile-head">
+    <div class="avatar-frame">
+      {{if .Profile.Avatar}}<img src="/avatars/{{.Profile.ID}}?v={{.Profile.Avatar}}" alt="">{{else}}<span>{{.Initial}}</span>{{end}}
     </div>
-    <div class="col-md-8">
-      <h4 data-i18n="Solves">Solves</h4>
-      <table class="table">
-        <thead><tr><th data-i18n="Challenge">Challenge</th><th data-i18n="Category">Category</th><th data-i18n="Value">Value</th><th data-i18n="Time">Time</th></tr></thead>
+    <div>
+      <h2 class="mb-1">{{.Profile.Name}}</h2>
+      {{if .Achievement}}<div class="profile-badge">{{.Achievement}}</div>{{end}}
+      {{if .Own}}<a class="btn btn-sm btn-outline-light mt-2" href="/settings" data-i18n="profile.edit">Edit profile</a>{{end}}
+    </div>
+  </section>
+
+  <section class="mt-4">
+    <div class="page-head">
+      <h3 data-i18n="profile.jeopardy">Jeopardy</h3>
+      <span class="profile-blood"><i class="bi bi-droplet-fill"></i> {{.Bloods}}</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead><tr><th data-i18n="Challenge">Challenge</th><th data-i18n="Category">Category</th><th data-i18n="Value">Value</th></tr></thead>
         <tbody>
           {{range .Solves}}
           <tr>
-            <td>{{.Challenge.Name}}</td>
-            <td>{{.Challenge.Category}}</td>
-            <td>{{.Challenge.Value}}</td>
-            <td>{{formatDate .Date}}</td>
+            <td>{{if .Blood}}<i class="bi bi-droplet-fill profile-blood-icon"></i>{{end}}{{.Name}}</td>
+            <td>{{.Category}}</td>
+            <td>{{.Points}}</td>
           </tr>
-          {{else}}<tr><td colspan="4" class="text-muted" data-i18n="No solves yet.">No solves yet.</td></tr>{{end}}
+          {{else}}<tr><td colspan="3">—</td></tr>{{end}}
         </tbody>
       </table>
-      {{if .Awards}}
-      <h4 class="mt-4" data-i18n="Awards">Awards</h4>
-      <ul class="list-group">
-        {{range .Awards}}
-        <li class="list-group-item d-flex justify-content-between"><span>{{.Name}}</span><span>{{.Value}}</span></li>
-        {{end}}
-      </ul>
-      {{end}}
     </div>
-  </div>
+  </section>
+
+  <section class="mt-4">
+    <div class="page-head">
+      <h3>AD</h3>
+      <span>{{.ADCount}}</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead><tr><th data-i18n="profile.event">Event</th><th data-i18n="score.place">Place</th><th data-i18n="score.score">Score</th></tr></thead>
+        <tbody>
+          {{range .AD}}
+          <tr>
+            <td><a href="/archive/{{.EventID}}">{{formatDate .When}}</a></td>
+            <td>{{.Place}}/{{.Field}}</td>
+            <td>{{.Points}}</td>
+          </tr>
+          {{else}}<tr><td colspan="3">—</td></tr>{{end}}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="mt-4">
+    <h3 data-i18n="Category">Category</h3>
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead><tr><th data-i18n="Category">Category</th><th data-i18n="admin.solves">Solves</th><th>%</th></tr></thead>
+        <tbody>
+          {{range .Categories}}
+          <tr><td>{{.Name}}</td><td>{{.Solved}}/{{.Total}}</td><td>{{.Percent}}</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </section>
 </main>
 {{template "footer" .}}

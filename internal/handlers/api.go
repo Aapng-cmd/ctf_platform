@@ -30,7 +30,7 @@ func (a *App) APIChallenges(c *gin.Context) {
 	chs := a.visibleChallenges(u)
 	solved := map[uint]bool{}
 	if u != nil {
-		solved = scoring.SolvedIDs(a.DB, u.ID, u.TeamID, a.Store.IsTeams())
+		solved = scoring.SolvedIDs(a.DB, u.ID, nil, false)
 	}
 	var data []gin.H
 	for _, ch := range chs {
@@ -91,7 +91,7 @@ func (a *App) APIScoreboard(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"success": false, "errors": []string{"Forbidden"}})
 		return
 	}
-	standings := scoring.Scoreboard(a.DB, a.Store, a.freezeFor(u), u != nil && u.IsAdmin())
+	standings := scoring.UserScoreboard(a.DB, a.freezeFor(u), u != nil && u.IsAdmin())
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": standings})
 }
 
@@ -112,7 +112,7 @@ func (a *App) APIScoreboardTop(c *gin.Context) {
 	if n <= 0 || n > 50 {
 		n = 10
 	}
-	standings := scoring.Scoreboard(a.DB, a.Store, a.freezeFor(u), u != nil && u.IsAdmin())
+	standings := scoring.UserScoreboard(a.DB, a.freezeFor(u), u != nil && u.IsAdmin())
 	if len(standings) > n {
 		standings = standings[:n]
 	}
@@ -142,17 +142,9 @@ func (a *App) APIScoreboardTop(c *gin.Context) {
 	q.Scan(&rows)
 	graph := map[string][]gin.H{}
 	scores := map[uint]int{}
-	teams := a.Store.IsTeams()
 	for _, r := range rows {
 		id := r.UserID
 		name := r.UserName
-		if teams {
-			if r.TeamID == nil {
-				continue
-			}
-			id = *r.TeamID
-			name = r.TeamName
-		}
 		if !ids[id] {
 			continue
 		}

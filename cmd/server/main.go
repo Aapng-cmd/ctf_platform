@@ -50,14 +50,16 @@ func main() {
 		log.Fatalf("redis: %v", err)
 	}
 	eng := ad.New(gdb, st, flagStore)
-	eng.Start()
 	defer eng.Stop()
 	app, err := handlers.New(gdb, st, cfg)
 	if err != nil {
 		log.Fatalf("app: %v", err)
 	}
 	app.Flags = flagStore
-	go app.RestoreDeployedTasks()
+	if cfg.RunEngine {
+		eng.Start()
+		go app.RestoreDeployedTasks()
+	}
 
 	if os.Getenv("GIN_MODE") == "" {
 		gin.SetMode(gin.ReleaseMode)
@@ -68,7 +70,7 @@ func main() {
 	} else if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
 		log.Fatalf("trusted proxies: %v", err)
 	}
-	r.Use(gin.Logger(), gin.Recovery(), middleware.SecurityHeaders())
+	r.Use(middleware.AccessLog(), gin.Recovery(), middleware.SecurityHeaders())
 	r.Use(gzip.Gzip(gzip.DefaultCompression,
 		gzip.WithExcludedExtensions([]string{".woff2", ".woff", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".zip", ".gz"}),
 		gzip.WithExcludedPathsRegexs([]string{`^/files/`, `^/swagger/`}),
@@ -88,7 +90,7 @@ func main() {
 	})
 	r.Use(sessions.Sessions("session", storeSess))
 	r.Use(middleware.LoadUser(gdb))
-	r.Use(middleware.CSRF())
+	r.Use(middleware.CSRF(st))
 	r.Use(middleware.SetupGuard(st))
 
 	docs.SwaggerInfo.Title = "CTF Platform API"
@@ -113,8 +115,11 @@ func main() {
 	r.POST("/attack/token", middleware.Authed(), app.AttackTokenPOST)
 	r.GET("/scoreboard", app.ScoreboardPage)
 	r.GET("/dashboard", app.DashboardPage)
+	r.GET("/archive", app.ArchiveList)
+	r.GET("/archive/:id", app.ArchiveView)
 	r.GET("/users", app.UsersList)
 	r.GET("/users/:id", app.UserDetail)
+	r.GET("/avatars/:id", app.AvatarGET)
 	r.GET("/teams", app.TeamsList)
 	r.GET("/teams/new", middleware.Authed(), app.TeamNewGET)
 	r.POST("/teams/new", middleware.Authed(), app.TeamNewPOST)
@@ -160,11 +165,14 @@ func main() {
 		admin.POST("/challenges/upload", app.AdminChallengeUpload)
 		admin.POST("/challenges/:id/redeploy", app.AdminChallengeRedeploy)
 		admin.POST("/challenges/:id/stop", app.AdminChallengeStop)
+		admin.POST("/challenges/:id/hide", app.AdminChallengeHide)
+		admin.POST("/challenges/:id/show", app.AdminChallengeShow)
 		admin.GET("/challenges/:id", app.AdminChallengeEditGET)
 		admin.POST("/challenges/:id", app.AdminChallengeEditPOST)
 		admin.POST("/challenges/:id/delete", app.AdminChallengeDelete)
 		admin.POST("/files/:id/delete", app.AdminFileDelete)
 		admin.GET("/users", app.AdminUsers)
+		admin.POST("/users", app.AdminUserCreate)
 		admin.GET("/users/:id", app.AdminUserEditGET)
 		admin.POST("/users/:id", app.AdminUserEditPOST)
 		admin.POST("/users/:id/delete", app.AdminUserDelete)
@@ -172,8 +180,6 @@ func main() {
 		admin.GET("/teams/:id", app.AdminTeamEditGET)
 		admin.POST("/teams/:id", app.AdminTeamEditPOST)
 		admin.POST("/teams/:id/delete", app.AdminTeamDelete)
-		admin.GET("/submissions", app.AdminSubmissions)
-		admin.POST("/submissions/:id/delete", app.AdminSubmissionDelete)
 		admin.GET("/pages", app.AdminPages)
 		admin.GET("/pages/new", app.AdminPageNewGET)
 		admin.POST("/pages", app.AdminPageNewPOST)
@@ -187,6 +193,10 @@ func main() {
 		admin.POST("/awards", app.AdminAwardCreate)
 		admin.POST("/awards/:id/delete", app.AdminAwardDelete)
 		admin.GET("/ad", app.AdminAD)
+		admin.POST("/ad/start", app.AdminADStart)
+		admin.POST("/ad/stop", app.AdminADEventStop)
+		admin.POST("/ad/adjust", app.AdminADAdjustPOST)
+		admin.POST("/ad/archive/:id/delete", app.AdminADArchiveDelete)
 		admin.POST("/ad/config", app.AdminADConfigPOST)
 		admin.POST("/ad/services", app.AdminADServicePOST)
 		admin.POST("/ad/services/:id/delete", app.AdminADServiceDelete)
@@ -208,7 +218,12 @@ func main() {
 	r.GET("/:route", app.CustomPage)
 
 	addr := ":" + cfg.Port
-	srv := &http.Server{Addr: addr, Handler: r}
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           r,
+		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       90 * time.Second,
+	}
 	sigCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go func() {
@@ -217,7 +232,9 @@ func main() {
 		eng.Stop()
 		done := make(chan struct{})
 		go func() {
-			app.StopDeployedTasks()
+			if cfg.RunEngine {
+				app.StopDeployedTasks()
+			}
 			close(done)
 		}()
 		select {

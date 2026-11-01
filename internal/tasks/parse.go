@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"archive/zip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -155,7 +156,49 @@ func ParseJeopardy(root string) (*JeopardySpec, error) {
 	if spec.Flag != "" && len(spec.Flags) == 0 {
 		spec.Flags = []FlagSpec{{Content: spec.Flag, Type: "static"}}
 	}
+	if err := applyHintsJSON(spec); err != nil {
+		return nil, err
+	}
+	spec.Category = models.CanonicalCategory(spec.Category)
 	return spec, nil
+}
+
+// applyHintsJSON loads hints.json when the task has one. That file replaces
+// hints from task.yml or the README, and every hint starts closed in the database.
+func applyHintsJSON(spec *JeopardySpec) error {
+	if spec == nil || strings.TrimSpace(spec.Root) == "" {
+		return nil
+	}
+	path := findFile(spec.Root, "hints.json")
+	if path == "" {
+		return nil
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var doc struct {
+		Hints []struct {
+			Hint string `json:"hint"`
+			Cost int    `json:"cost"`
+		} `json:"hints"`
+	}
+	if err := json.Unmarshal(b, &doc); err != nil {
+		return fmt.Errorf("hints.json: %w", err)
+	}
+	spec.Hints = nil
+	for _, h := range doc.Hints {
+		text := strings.TrimSpace(h.Hint)
+		if text == "" {
+			continue
+		}
+		cost := h.Cost
+		if cost < 0 {
+			cost = 0
+		}
+		spec.Hints = append(spec.Hints, HintSpec{Content: text, Cost: cost})
+	}
+	return nil
 }
 
 func ParseAD(root string) (*ADSpec, error) {

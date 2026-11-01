@@ -107,13 +107,7 @@ func (s *Store) CTFName() string {
 }
 
 func (s *Store) UserMode() string {
-	if s.IsAD() {
-		return models.ModeTeams
-	}
-	mode := s.GetDefault("user_mode", models.ModeUsers)
-	if mode != models.ModeTeams {
-		return models.ModeUsers
-	}
+	// Jeopardy and Attack-Defense run together, and Attack-Defense scores teams.
 	return models.ModeTeams
 }
 
@@ -127,14 +121,14 @@ func (s *Store) GameMode() string {
 	}
 }
 
+// IsAD is true only while an Attack-Defense event is running. Pause keeps it running.
 func (s *Store) IsAD() bool {
-	m := s.GameMode()
-	return m == models.GameAttackDefense || m == models.GameMixed
+	return s.Bool("ad_running")
 }
 
+// IsJeopardy stays on whether or not an Attack-Defense event is running.
 func (s *Store) IsJeopardy() bool {
-	m := s.GameMode()
-	return m == models.GameJeopardy || m == models.GameMixed
+	return true
 }
 
 func (s *Store) ADPaused() bool {
@@ -266,24 +260,13 @@ func parseClock(v string, loc *time.Location) *time.Time {
 	return nil
 }
 
-func (s *Store) Start() *time.Time { return s.ParseTime("start") }
-func (s *Store) End() *time.Time   { return s.ParseTime("end") }
-func (s *Store) Freeze() *time.Time {
-	if t := s.ParseTime("freeze"); t != nil {
-		return t
-	}
-	return nil
-}
+func (s *Store) Start() *time.Time  { return s.ParseTime("start") }
+func (s *Store) End() *time.Time    { return s.ParseTime("end") }
+func (s *Store) Freeze() *time.Time { return nil }
 
-func (s *Store) Started() bool {
-	start := s.Start()
-	return start == nil || !time.Now().Before(*start)
-}
+func (s *Store) Started() bool { return true }
 
-func (s *Store) Ended() bool {
-	end := s.End()
-	return end != nil && time.Now().After(*end)
-}
+func (s *Store) Ended() bool { return false }
 
 func (s *Store) DuringCTF() bool {
 	return s.Started() && !s.Ended()

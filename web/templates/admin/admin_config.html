@@ -10,30 +10,9 @@
     <div class="mb-3"><label class="form-label" data-i18n="CTF Name">CTF Name</label><input class="form-control" name="ctf_name" value="{{index .Config "ctf_name"}}"></div>
     <div class="mb-3"><label class="form-label" data-i18n="Description">Description</label><textarea class="form-control" name="ctf_description" rows="3">{{index .Config "ctf_description"}}</textarea></div>
     <div class="mb-3">
-      <label class="form-label" data-i18n="Game Mode">Game Mode</label>
-      <select class="form-select" name="game_mode">
-        {{$g := index .Config "game_mode"}}
-        <option value="jeopardy" {{if eq $g "jeopardy"}}selected{{end}} data-i18n="Jeopardy">Jeopardy</option>
-        <option value="attack_defense" {{if eq $g "attack_defense"}}selected{{end}} data-i18n="Attack-Defense">Attack-Defense</option>
-        <option value="mixed" {{if eq $g "mixed"}}selected{{end}} data-i18n="Mixed">Mixed</option>
-      </select>
-    </div>
-    <div class="mb-3">
-      <label class="form-label" data-i18n="User Mode">User Mode</label>
-      <select class="form-select" name="user_mode">
-        <option value="users" {{if eq (index .Config "user_mode") "users"}}selected{{end}} data-i18n="Users">Users</option>
-        <option value="teams" {{if eq (index .Config "user_mode") "teams"}}selected{{end}} data-i18n="Teams">Teams</option>
-      </select>
-    </div>
-    <div class="mb-3">
       <label class="form-label" data-i18n="config.timezone">Timezone</label>
       {{template "tzselect" (index .Config "timezone")}}
-      <div class="form-text"><span data-i18n="config.timezoneHint">Everyone sees event times in this timezone.</span> {{.ZoneNow}}</div>
-    </div>
-    <div class="row">
-      <div class="col mb-3"><label class="form-label" data-i18n="Start">Start</label><input class="form-control" type="datetime-local" name="start" value="{{index .Config "start"}}"></div>
-      <div class="col mb-3"><label class="form-label" data-i18n="End">End</label><input class="form-control" type="datetime-local" name="end" value="{{index .Config "end"}}"></div>
-      <div class="col mb-3"><label class="form-label" data-i18n="Freeze">Freeze</label><input class="form-control" type="datetime-local" name="freeze" value="{{index .Config "freeze"}}"></div>
+      <div class="form-text">{{.ZoneNow}}</div>
     </div>
     <div class="row">
       <div class="col mb-3">

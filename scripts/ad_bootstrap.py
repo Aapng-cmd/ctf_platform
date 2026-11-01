@@ -380,6 +380,16 @@ def assign_hosts(admin):
         print("host %s -> %s:%d" % (team, host, BASE_PORT))
 
 
+def start_ad(admin):
+    nonce, page = admin.nonce("/admin/ad")
+    if 'action="/admin/ad/stop"' in page:
+        print("AD already running")
+        return
+    _, final, body = admin.open("/admin/ad/start", {"nonce": nonce})
+    must("/admin/ad" in final or "/archive" in final, "could not start AD:\n" + body[:400])
+    print("AD started")
+
+
 def main():
     fresh = setup(ADMIN)
     admin = login_admin()
@@ -401,6 +411,7 @@ def main():
         launched = True
     else:
         print("task dir or checker zip is missing, skipped service launch")
+    start_ad(admin)
     end = start + timedelta(minutes=int(PREP_MINUTES))
     print()
     print("Admin")

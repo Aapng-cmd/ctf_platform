@@ -29,7 +29,6 @@
   -H 'Content-Type: application/json' \
   -d '["{{.FlagHint}}"]'</pre>
     <div class="curl-foot">
-      <span class="small text-muted" data-i18n="attack.curlHint">Up to 500 flags in one JSON array; each gets its own status in the reply.</span>
       {{if .Captain}}
       <form method="post" action="/attack/token" data-confirm="confirm.newToken">
         <input type="hidden" name="nonce" value="{{.CSRF}}">
@@ -42,7 +41,6 @@
 
   {{if .Captain}}
   <h5 data-i18n="attack.vulnbox">Your vulnbox</h5>
-  <p class="text-muted small" data-i18n="attack.oneHost">All of your services use this host. The port belongs to the service and is the same for every team.</p>
   <form method="post" action="/attack/hosts" class="row g-2 mb-3">
     <input type="hidden" name="nonce" value="{{.CSRF}}">
     <div class="col-md-8"><input class="form-control" name="host" value="{{.Host}}" placeholder="10.0.1.10"></div>

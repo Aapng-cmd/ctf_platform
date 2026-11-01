@@ -22,25 +22,24 @@ func (a *App) AdminHome(c *gin.Context) {
 }
 
 func (a *App) AdminStatistics(c *gin.Context) {
-	var users, teams, challenges, solves, submissions int64
+	var users, teams, challenges, solves int64
 	a.DB.Model(&models.User{}).Count(&users)
 	a.DB.Model(&models.Team{}).Count(&teams)
 	a.DB.Model(&models.Challenge{}).Count(&challenges)
 	a.DB.Model(&models.Solve{}).Count(&solves)
-	a.DB.Model(&models.Submission{}).Count(&submissions)
 	var byCat []struct {
 		Category string
 		Count    int64
 	}
 	a.DB.Model(&models.Challenge{}).Select("category, count(*) as count").Group("category").Scan(&byCat)
-	standings := scoring.Scoreboard(a.DB, a.Store, nil, true)
+	standings := scoring.UserScoreboard(a.DB, nil, true)
 	top := standings
 	if len(top) > 10 {
 		top = top[:10]
 	}
 	a.HTML(c, http.StatusOK, "admin_statistics.html", gin.H{
 		"Title": "Statistics", "Admin": true, "Users": users, "Teams": teams,
-		"Challenges": challenges, "Solves": solves, "Submissions": submissions,
+		"Challenges": challenges, "Solves": solves,
 		"ByCategory": byCat, "Top": top, "Flashes": a.flashes(c),
 	})
 }
@@ -80,7 +79,7 @@ func (a *App) AdminChallengeEditGET(c *gin.Context) {
 
 func (a *App) parseChallengeForm(c *gin.Context, ch *models.Challenge) {
 	ch.Name = strings.TrimSpace(c.PostForm("name"))
-	ch.Category = strings.TrimSpace(c.PostForm("category"))
+	ch.Category = models.CanonicalCategory(c.PostForm("category"))
 	ch.Description = c.PostForm("description")
 	ch.Attribution = strings.TrimSpace(c.PostForm("attribution"))
 	ch.ConnectionInfo = strings.TrimSpace(c.PostForm("connection_info"))
@@ -149,12 +148,38 @@ func (a *App) AdminChallengeEditPOST(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/admin/challenges")
 		return
 	}
+	prev := ch.State
 	a.parseChallengeForm(c, &ch)
+	opening := ch.State == models.StateVisible && prev != models.StateVisible
+	hiding := ch.State == models.StateHidden && prev != models.StateHidden
+	if hiding {
+		if err := a.hideChallengeStack(&ch); err != nil {
+			a.flash(c, "danger", "Could not stop the challenge")
+			c.Redirect(http.StatusFound, "/admin/challenges/"+strconv.Itoa(id))
+			return
+		}
+		if strings.TrimSpace(ch.ComposeDir) != "" {
+			ch.DeployStatus = "stopped"
+		}
+	}
+	if opening && strings.TrimSpace(ch.ComposeDir) != "" && dirExists(ch.ComposeDir) {
+		ch.State = prev
+	}
 	if err := a.DB.Save(&ch).Error; err != nil {
 		a.flash(c, "danger", "Could not save challenge")
 	} else {
 		a.saveChallengeExtras(c, &ch)
 		_ = scoring.RecalcChallenge(a.DB, &ch)
+		if hiding {
+			a.syncChallengeSolvers(ch.ID)
+		}
+		if opening {
+			if strings.TrimSpace(ch.ComposeDir) != "" && dirExists(ch.ComposeDir) {
+				go a.deployChallenge(ch.ID)
+			} else {
+				a.syncChallengeSolvers(ch.ID)
+			}
+		}
 		a.flash(c, "success", "Challenge updated")
 	}
 	c.Redirect(http.StatusFound, "/admin/challenges/"+strconv.Itoa(id))
@@ -233,6 +258,23 @@ func (a *App) saveChallengeExtras(c *gin.Context, ch *models.Challenge) {
 
 func (a *App) AdminChallengeDelete(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
+	var ch models.Challenge
+	if a.DB.First(&ch, id).Error != nil {
+		c.Redirect(http.StatusFound, "/admin/challenges")
+		return
+	}
+	if err := a.removeChallengeStack(&ch); err != nil {
+		a.flash(c, "danger", "Could not remove the challenge containers")
+		c.Redirect(http.StatusFound, "/admin/challenges")
+		return
+	}
+	var solvers []uint
+	a.DB.Model(&models.Solve{}).Where("challenge_id = ?", id).Distinct().Pluck("user_id", &solvers)
+	var hintIDs []uint
+	a.DB.Model(&models.Hint{}).Where("challenge_id = ?", id).Pluck("id", &hintIDs)
+	if len(hintIDs) > 0 {
+		a.DB.Where("type = ? AND target IN ?", models.UnlockHint, hintIDs).Delete(&models.Unlock{})
+	}
 	a.DB.Where("challenge_id = ?", id).Delete(&models.Flag{})
 	a.DB.Where("challenge_id = ?", id).Delete(&models.Hint{})
 	a.DB.Where("challenge_id = ?", id).Delete(&models.Tag{})
@@ -240,6 +282,9 @@ func (a *App) AdminChallengeDelete(c *gin.Context) {
 	a.DB.Where("challenge_id = ?", id).Delete(&models.Solve{})
 	a.DB.Where("challenge_id = ?", id).Delete(&models.Submission{})
 	a.DB.Delete(&models.Challenge{}, id)
+	for _, userID := range solvers {
+		a.syncAchievement(userID)
+	}
 	a.flash(c, "success", "Challenge deleted")
 	c.Redirect(http.StatusFound, "/admin/challenges")
 }
@@ -288,13 +333,20 @@ func (a *App) AdminUserEditPOST(c *gin.Context) {
 	updates := map[string]any{
 		"name":        strings.TrimSpace(c.PostForm("name")),
 		"email":       strings.TrimSpace(c.PostForm("email")),
-		"type":        c.PostForm("type"),
 		"website":     c.PostForm("website"),
 		"affiliation": c.PostForm("affiliation"),
 		"country":     c.PostForm("country"),
 		"hidden":      c.PostForm("hidden") == "on",
 		"banned":      c.PostForm("banned") == "on",
 		"verified":    c.PostForm("verified") == "on",
+	}
+	if typ := c.PostForm("type"); typ == models.UserTypeUser || typ == models.UserTypeAdmin {
+		if user.IsAdmin() && typ != models.UserTypeAdmin && a.adminCount() <= 1 {
+			a.flash(c, "danger", "The last admin cannot be removed")
+			c.Redirect(http.StatusFound, "/admin/users/"+strconv.Itoa(id))
+			return
+		}
+		updates["type"] = typ
 	}
 	if p := c.PostForm("password"); p != "" {
 		if len(p) < 6 {
@@ -313,9 +365,49 @@ func (a *App) AdminUserEditPOST(c *gin.Context) {
 
 func (a *App) AdminUserDelete(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
+	var user models.User
+	if a.DB.First(&user, id).Error == nil && user.IsAdmin() && a.adminCount() <= 1 {
+		a.flash(c, "danger", "The last admin cannot be removed")
+		c.Redirect(http.StatusFound, "/admin/users/"+strconv.Itoa(id))
+		return
+	}
 	a.DB.Delete(&models.User{}, id)
 	a.flash(c, "success", "User deleted")
 	c.Redirect(http.StatusFound, "/admin/users")
+}
+
+func (a *App) adminCount() int64 {
+	var n int64
+	a.DB.Model(&models.User{}).Where("type = ?", models.UserTypeAdmin).Count(&n)
+	return n
+}
+
+func (a *App) AdminUserCreate(c *gin.Context) {
+	name := strings.TrimSpace(c.PostForm("name"))
+	email := strings.TrimSpace(c.PostForm("email"))
+	password := c.PostForm("password")
+	if !webutil.ValidName(name) || !webutil.ValidEmail(email) || len(password) < 6 {
+		a.flash(c, "danger", "Invalid registration details. Password must be at least 6 characters.")
+		c.Redirect(http.StatusFound, "/admin/users")
+		return
+	}
+	hash, err := webutil.HashPassword(password)
+	if err != nil {
+		a.flash(c, "danger", "Could not create admin")
+		c.Redirect(http.StatusFound, "/admin/users")
+		return
+	}
+	user := models.User{
+		Email: email, Name: name, Password: hash, Type: models.UserTypeAdmin,
+		Verified: true, Created: time.Now(),
+	}
+	if err := a.DB.Create(&user).Error; err != nil {
+		a.flash(c, "danger", "That name or email is already taken")
+		c.Redirect(http.StatusFound, "/admin/users")
+		return
+	}
+	a.flash(c, "success", "Admin created")
+	c.Redirect(http.StatusFound, "/admin/users/"+strconv.Itoa(int(user.ID)))
 }
 
 func (a *App) AdminTeams(c *gin.Context) {
@@ -371,25 +463,6 @@ func (a *App) AdminTeamDelete(c *gin.Context) {
 	a.DB.Delete(&models.Team{}, id)
 	a.flash(c, "success", "Team deleted")
 	c.Redirect(http.StatusFound, "/admin/teams")
-}
-
-func (a *App) AdminSubmissions(c *gin.Context) {
-	kind := c.DefaultQuery("type", "incorrect")
-	q := a.DB.Preload("User").Preload("Challenge").Order("date DESC").Limit(500)
-	if kind != "all" {
-		q = q.Where("type = ?", kind)
-	}
-	var subs []models.Submission
-	q.Find(&subs)
-	a.HTML(c, http.StatusOK, "admin_submissions.html", gin.H{
-		"Title": "Submissions", "Admin": true, "Submissions": subs, "Kind": kind, "Flashes": a.flashes(c),
-	})
-}
-
-func (a *App) AdminSubmissionDelete(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	a.DB.Delete(&models.Submission{}, id)
-	c.Redirect(http.StatusFound, "/admin/submissions")
 }
 
 func (a *App) AdminPages(c *gin.Context) {
@@ -523,9 +596,6 @@ func (a *App) AdminConfigGET(c *gin.Context) {
 			"user_mode":               a.Store.UserMode(),
 			"game_mode":               a.Store.GameMode(),
 			"timezone":                a.Store.Timezone(),
-			"start":                   clockInput(a.Store.Start(), loc),
-			"end":                     clockInput(a.Store.End(), loc),
-			"freeze":                  clockInput(a.Store.Freeze(), loc),
 			"challenge_visibility":    a.Store.ChallengeVisibility(),
 			"score_visibility":        a.Store.ScoreVisibility(),
 			"account_visibility":      a.Store.AccountVisibility(),
@@ -538,26 +608,27 @@ func (a *App) AdminConfigGET(c *gin.Context) {
 }
 
 func (a *App) AdminConfigPOST(c *gin.Context) {
-	loc, zone, err := loadZone(c.PostForm("timezone"))
+	_, zone, err := loadZone(c.PostForm("timezone"))
 	if err != nil {
 		a.flash(c, "danger", "Unknown timezone")
 		c.Redirect(http.StatusFound, "/admin/config")
 		return
 	}
 	keys := []string{
-		"ctf_name", "ctf_description", "user_mode", "game_mode",
+		"ctf_name", "ctf_description",
 		"challenge_visibility", "score_visibility", "account_visibility",
 		"registration_visibility", "max_team_size",
 	}
-	pairs := map[string]string{"timezone": zone}
+	pairs := map[string]string{
+		"timezone":  zone,
+		"user_mode": models.ModeTeams,
+		"game_mode": models.GameMixed,
+		"start":     "",
+		"end":       "",
+		"freeze":    "",
+	}
 	for _, k := range keys {
 		pairs[k] = c.PostForm(k)
-	}
-	for _, k := range []string{"start", "end", "freeze"} {
-		pairs[k] = clockValue(c.PostForm(k), loc)
-	}
-	if pairs["game_mode"] == models.GameAttackDefense || pairs["game_mode"] == models.GameMixed {
-		pairs["user_mode"] = models.ModeTeams
 	}
 	if err := a.Store.SetMany(pairs); err != nil {
 		a.flash(c, "danger", "Could not save config")
@@ -568,7 +639,7 @@ func (a *App) AdminConfigPOST(c *gin.Context) {
 }
 
 func (a *App) AdminScoreboard(c *gin.Context) {
-	standings := scoring.Scoreboard(a.DB, a.Store, nil, true)
+	standings := scoring.UserScoreboard(a.DB, nil, true)
 	a.HTML(c, http.StatusOK, "admin_scoreboard.html", gin.H{"Title": "Scoreboard", "Admin": true, "Standings": standings, "Flashes": a.flashes(c)})
 }
 
@@ -582,11 +653,12 @@ func (a *App) AdminManualSolve(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/admin/scoreboard")
 		return
 	}
-	solve := models.Solve{ChallengeID: ch.ID, UserID: user.ID, TeamID: user.TeamID, Provided: "admin", Date: time.Now(), IP: c.ClientIP()}
+	solve := models.Solve{ChallengeID: ch.ID, UserID: user.ID, Provided: "admin", Date: time.Now(), IP: c.ClientIP()}
 	if err := a.DB.Create(&solve).Error; err != nil {
 		a.flash(c, "warning", "Already solved")
 	} else {
 		_ = scoring.RecalcChallenge(a.DB, &ch)
+		a.syncAchievement(user.ID)
 		a.flash(c, "success", "Solve awarded")
 	}
 	c.Redirect(http.StatusFound, "/admin/scoreboard")

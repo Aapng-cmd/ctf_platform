@@ -22,13 +22,13 @@
   <link rel="stylesheet" href="/static/vendor/fonts/plex.css">
   <link rel="stylesheet" href="/static/vendor/bootstrap/bootstrap.min.css">
   <link rel="stylesheet" href="/static/vendor/bootstrap-icons/bootstrap-icons.min.css">
-  <link rel="stylesheet" href="/static/css/core.css?v=14">
+  <link rel="stylesheet" href="/static/css/core.css?v=19">
 </head>
 <body class="{{if .Admin}}admin-body{{end}}">
 {{end}}
 
 {{define "navbar"}}
-<nav class="navbar navbar-expand-lg navbar-dark ctfd-navbar">
+<nav class="navbar navbar-expand-xl navbar-dark ctfd-navbar">
   <div class="container">
     <a class="navbar-brand fw-bold" href="/">{{.CTFName}}</a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav" aria-label="Menu" data-i18n-aria="Menu"><span class="navbar-toggler-icon"></span></button>
@@ -37,6 +37,7 @@
         {{if .IsTeams}}<li class="nav-item"><a class="nav-link {{if eq .RequestPath "/teams"}}active{{end}}" href="/teams" data-i18n="nav.teams">Teams</a></li>
         {{else}}<li class="nav-item"><a class="nav-link {{if eq .RequestPath "/users"}}active{{end}}" href="/users" data-i18n="nav.users">Users</a></li>{{end}}
         <li class="nav-item"><a class="nav-link {{if eq .RequestPath "/scoreboard"}}active{{end}}" href="/scoreboard" data-i18n="nav.scoreboard">Scoreboard</a></li>
+        <li class="nav-item"><a class="nav-link {{if hasPrefix .RequestPath "/archive"}}active{{end}}" href="/archive" data-i18n="nav.archive">Archive</a></li>
         {{if .IsJeopardy}}<li class="nav-item"><a class="nav-link {{if eq .RequestPath "/challenges"}}active{{end}}" href="/challenges" data-i18n="nav.challenges">Challenges</a></li>{{end}}
         {{if .IsAD}}<li class="nav-item"><a class="nav-link {{if eq .RequestPath "/dashboard"}}active{{end}}" href="/dashboard" data-i18n="nav.dashboard">Dashboard</a></li>
         <li class="nav-item"><a class="nav-link {{if eq .RequestPath "/attack"}}active{{end}}" href="/attack" data-i18n="nav.attack">Attack</a></li>{{end}}
@@ -64,7 +65,7 @@
             {{if .IsTeams}}
             <li><hr class="dropdown-divider"></li>
             {{if .User.TeamID}}<li><a class="dropdown-item" href="/teams/{{.User.TeamID}}" data-i18n="nav.team">Team</a></li>
-            {{else}}<li><a class="dropdown-item" href="/teams/new" data-i18n="nav.createTeam">Create Team</a></li>
+            {{else if .IsAD}}<li><a class="dropdown-item" href="/teams/new" data-i18n="nav.createTeam">Create Team</a></li>
             <li><a class="dropdown-item" href="/teams/join" data-i18n="nav.joinTeam">Join Team</a></li>{{end}}
             {{end}}
             <li><hr class="dropdown-divider"></li>
@@ -107,7 +108,6 @@
   <a href="/admin/challenges" class="{{if eq .RequestPath "/admin/challenges"}}active{{end}}"><i class="bi bi-flag"></i> <span data-i18n="admin.challenges">Challenges</span></a>
   <a href="/admin/users" class="{{if eq .RequestPath "/admin/users"}}active{{end}}"><i class="bi bi-people"></i> <span data-i18n="admin.users">Users</span></a>
   {{if .IsTeams}}<a href="/admin/teams" class="{{if eq .RequestPath "/admin/teams"}}active{{end}}"><i class="bi bi-diagram-3"></i> <span data-i18n="admin.teams">Teams</span></a>{{end}}
-  <a href="/admin/submissions" class="{{if eq .RequestPath "/admin/submissions"}}active{{end}}"><i class="bi bi-inbox"></i> <span data-i18n="admin.submissions">Submissions</span></a>
   <a href="/admin/scoreboard" class="{{if eq .RequestPath "/admin/scoreboard"}}active{{end}}"><i class="bi bi-trophy"></i> <span data-i18n="admin.scoreboard">Scoreboard</span></a>
   <a href="/admin/pages" class="{{if eq .RequestPath "/admin/pages"}}active{{end}}"><i class="bi bi-file-earmark-text"></i> <span data-i18n="admin.pages">Pages</span></a>
   <a href="/admin/awards" class="{{if eq .RequestPath "/admin/awards"}}active{{end}}"><i class="bi bi-award"></i> <span data-i18n="admin.awards">Awards</span></a>
@@ -141,10 +141,10 @@
     </div>
   </div>
 </dialog>
-<script src="/static/js/i18n.js?v=20"></script>
+<script src="/static/js/i18n.js?v=28"></script>
 <script src="/static/vendor/bootstrap/bootstrap.bundle.min.js"></script>
 <script>window.CSRF = {{.CSRF}};</script>
-<script src="/static/js/app.js?v=12"></script>
+<script src="/static/js/app.js?v=15"></script>
 {{if .PageScript}}<script src="{{.PageScript}}" data-page-script="1"></script>{{end}}
 </body>
 </html>

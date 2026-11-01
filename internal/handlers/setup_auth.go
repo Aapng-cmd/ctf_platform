@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aapng-cmd/ctf_platform/internal/middleware"
@@ -13,30 +15,24 @@ import (
 )
 
 func (a *App) SetupGET(c *gin.Context) {
-	if a.Store.SetupComplete() {
-		c.Redirect(http.StatusFound, "/")
+	if a.setupClosed() {
+		a.HTML(c, http.StatusNotFound, "error.html", gin.H{"Title": "404", "Message": "Page not found"})
 		return
 	}
 	a.HTML(c, http.StatusOK, "setup.html", gin.H{"Title": "Setup", "Flashes": a.flashes(c)})
 }
 
+var setupMu sync.Mutex
+
 func (a *App) SetupPOST(c *gin.Context) {
-	if a.Store.SetupComplete() {
-		c.Redirect(http.StatusFound, "/")
+	setupMu.Lock()
+	defer setupMu.Unlock()
+	if a.setupClosed() {
+		a.HTML(c, http.StatusNotFound, "error.html", gin.H{"Title": "404", "Message": "Page not found"})
 		return
 	}
 	name := strings.TrimSpace(c.PostForm("ctf_name"))
 	desc := c.PostForm("ctf_description")
-	mode := c.PostForm("user_mode")
-	game := c.PostForm("game_mode")
-	if game != models.GameAttackDefense && game != models.GameMixed {
-		game = models.GameJeopardy
-	}
-	if game != models.GameJeopardy {
-		mode = models.ModeTeams
-	} else if mode != models.ModeTeams {
-		mode = models.ModeUsers
-	}
 	adminName := strings.TrimSpace(c.PostForm("name"))
 	adminEmail := strings.TrimSpace(c.PostForm("email"))
 	adminPass := c.PostForm("password")
@@ -44,9 +40,6 @@ func (a *App) SetupPOST(c *gin.Context) {
 		a.flash(c, "danger", "Please fill all required fields. Password must be at least 6 characters.")
 		c.Redirect(http.StatusFound, "/setup")
 		return
-	}
-	if mode != models.ModeTeams {
-		mode = models.ModeUsers
 	}
 	_, zone, zerr := loadZone(c.PostForm("timezone"))
 	if zerr != nil {
@@ -86,9 +79,11 @@ func (a *App) SetupPOST(c *gin.Context) {
 	_ = a.Store.SetMany(map[string]string{
 		"ctf_name":                name,
 		"ctf_description":         desc,
-		"user_mode":               mode,
-		"game_mode":               game,
+		"user_mode":               models.ModeTeams,
+		"game_mode":               models.GameMixed,
 		"timezone":                zone,
+		"ad_running":              "false",
+		"ad_event_id":             "0",
 		"ad_paused":               "true",
 		"ad_round_seconds":        "15",
 		"ad_flag_lifetime_rounds": "3",
@@ -108,6 +103,17 @@ func (a *App) SetupPOST(c *gin.Context) {
 	s.Set("user_id", int(admin.ID))
 	_ = s.Save()
 	c.Redirect(http.StatusFound, "/admin/config")
+}
+
+// setupClosed is true once the first admin exists or setup has been saved.
+// /setup then answers 404. Later admins are created in the admin panel.
+func (a *App) setupClosed() bool {
+	if a.Store != nil && a.Store.SetupComplete() {
+		return true
+	}
+	var n int64
+	a.DB.Model(&models.User{}).Where("type = ?", models.UserTypeAdmin).Count(&n)
+	return n > 0
 }
 
 func defaultIndex(name, desc string) string {
@@ -134,7 +140,8 @@ func (a *App) LoginPOST(c *gin.Context) {
 		return
 	}
 	var u models.User
-	if err := a.DB.Where("name = ? OR email = ?", name, name).First(&u).Error; err != nil || !webutil.CheckPassword(u.Password, password) {
+	err := a.DB.Where("name = ? OR email = ?", name, name).First(&u).Error
+	if !webutil.CheckPassword(u.Password, password) || err != nil {
 		a.flash(c, "danger", "Your username or password is incorrect")
 		c.Redirect(http.StatusFound, "/login")
 		return
@@ -206,10 +213,6 @@ func (a *App) RegisterPOST(c *gin.Context) {
 	s := sessions.Default(c)
 	s.Set("user_id", int(u.ID))
 	_ = s.Save()
-	if a.Store.IsTeams() {
-		c.Redirect(http.StatusFound, "/teams/join")
-		return
-	}
 	c.Redirect(http.StatusFound, "/challenges")
 }
 
@@ -221,31 +224,62 @@ func (a *App) Logout(c *gin.Context) {
 }
 
 func (a *App) SettingsGET(c *gin.Context) {
-	a.HTML(c, http.StatusOK, "settings.html", gin.H{"Title": "Settings", "Flashes": a.flashes(c)})
+	a.HTML(c, http.StatusOK, "settings.html", gin.H{
+		"Title": "Settings", "PageScript": "/static/js/avatar.js?v=1", "Flashes": a.flashes(c),
+	})
 }
 
 func (a *App) SettingsPOST(c *gin.Context) {
 	u := middleware.CurrentUser(c)
-	updates := map[string]any{
-		"website":     strings.TrimSpace(c.PostForm("website")),
-		"affiliation": strings.TrimSpace(c.PostForm("affiliation")),
-		"country":     strings.TrimSpace(c.PostForm("country")),
+	if u == nil {
+		c.Redirect(http.StatusFound, "/login")
+		return
 	}
-	if email := strings.TrimSpace(c.PostForm("email")); webutil.ValidEmail(email) {
-		updates["email"] = email
+	name := strings.TrimSpace(c.PostForm("name"))
+	if !webutil.ValidName(name) {
+		a.flash(c, "danger", "Login is required")
+		c.Redirect(http.StatusFound, "/settings")
+		return
 	}
-	confirm := c.PostForm("confirm")
-	if confirm != "" && webutil.CheckPassword(u.Password, confirm) {
-		if p := c.PostForm("password"); len(p) >= 6 {
-			if hash, err := webutil.HashPassword(p); err == nil {
-				updates["password"] = hash
-			}
+	email := strings.TrimSpace(c.PostForm("email"))
+	nameChanged := name != u.Name
+	emailChanged := webutil.ValidEmail(email) && email != u.Email
+	password := c.PostForm("password")
+	if nameChanged || emailChanged || password != "" {
+		if !webutil.CheckPassword(u.Password, c.PostForm("confirm")) {
+			a.flash(c, "danger", "Current password is incorrect")
+			c.Redirect(http.StatusFound, "/settings")
+			return
 		}
 	}
-	if err := a.DB.Model(u).Updates(updates).Error; err != nil {
-		a.flash(c, "danger", "Could not update profile")
-	} else {
-		a.flash(c, "success", "Your profile has been updated")
+	updates := map[string]any{"name": name}
+	if emailChanged {
+		updates["email"] = email
 	}
-	c.Redirect(http.StatusFound, "/settings")
+	if password != "" {
+		if len(password) < 6 {
+			a.flash(c, "danger", "Password must be at least 6 characters")
+			c.Redirect(http.StatusFound, "/settings")
+			return
+		}
+		hash, err := webutil.HashPassword(password)
+		if err != nil {
+			a.flash(c, "danger", "Could not update profile")
+			c.Redirect(http.StatusFound, "/settings")
+			return
+		}
+		updates["password"] = hash
+	}
+	if err := a.DB.Model(u).Updates(updates).Error; err != nil {
+		a.flash(c, "danger", "That name or email is already taken")
+		c.Redirect(http.StatusFound, "/settings")
+		return
+	}
+	if err := a.saveAvatar(c, u.ID); err != nil {
+		a.flash(c, "danger", err.Error())
+		c.Redirect(http.StatusFound, "/settings")
+		return
+	}
+	a.flash(c, "success", "Your profile has been updated")
+	c.Redirect(http.StatusFound, "/users/"+strconv.Itoa(int(u.ID)))
 }

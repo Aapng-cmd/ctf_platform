@@ -201,9 +201,84 @@ func Down(dir string) (string, error) {
 	return runCompose(context.Background(), 90*time.Second, dir, "down", "--remove-orphans", "-t", "15")
 }
 
+// DownTask stops the Jeopardy stack and leaves its volumes in place.
+// The checker overlay is not part of this command.
+func DownTask(dir string) (string, error) {
+	main := composeFile(dir)
+	if !fileExists(main) {
+		return "", nil
+	}
+	return runComposeNotify(context.Background(), 90*time.Second, dir, []string{filepath.Base(main)}, nil, "down", "--remove-orphans", "-t", "15")
+}
+
+// DownPrune stops the Jeopardy stack, deletes its volumes and local images,
+// then prunes leftover containers, volumes and images of that compose project.
+func DownPrune(dir string) (string, error) {
+	var out string
+	var err error
+	main := composeFile(dir)
+	if fileExists(main) {
+		out, err = runComposeNotify(context.Background(), 90*time.Second, dir, []string{filepath.Base(main)}, nil, "down", "--remove-orphans", "-v", "--rmi", "local", "-t", "15")
+	}
+	extra, perr := pruneProject(dir)
+	if extra != "" {
+		if out != "" {
+			out += "\n"
+		}
+		out += extra
+	}
+	if err != nil {
+		return out, err
+	}
+	return out, perr
+}
+
+func pruneProject(dir string) (string, error) {
+	bin, err := exec.LookPath("docker")
+	if err != nil {
+		return "", err
+	}
+	name := projectName(dir)
+	var buf strings.Builder
+	var first error
+	filters := [][]string{
+		{"container", "prune", "-f", "--filter", "label=com.docker.compose.project=" + name},
+		{"volume", "prune", "-f", "--filter", "label=com.docker.compose.project=" + name},
+		{"image", "prune", "-f", "--filter", "label=com.docker.compose.project=" + name},
+	}
+	for _, args := range filters {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		cmd := exec.CommandContext(ctx, bin, args...)
+		b, runErr := cmd.CombinedOutput()
+		cancel()
+		text := strings.TrimSpace(string(b))
+		if text != "" {
+			if buf.Len() > 0 {
+				buf.WriteByte('\n')
+			}
+			buf.WriteString(text)
+		}
+		if runErr != nil && first == nil {
+			first = runErr
+		}
+	}
+	return buf.String(), first
+}
+
 // DownVolumes also removes the named volumes of the stack, including checker state.
 func DownVolumes(dir string) (string, error) {
 	return runCompose(context.Background(), 90*time.Second, dir, "down", "--remove-orphans", "-v", "-t", "15")
+}
+
+// DownChecker stops only the checker overlay and removes its volumes.
+// The task compose file in the same directory is not passed, and orphans are
+// kept, so a service started from that file stays up.
+func DownChecker(dir string) (string, error) {
+	overlay := filepath.Join(dir, "ctfd-checker.compose.yml")
+	if !fileExists(overlay) {
+		return "", nil
+	}
+	return runComposeNotify(context.Background(), 90*time.Second, dir, []string{"ctfd-checker.compose.yml"}, nil, "down", "-v", "-t", "15")
 }
 
 // DeployDirs lists compose project directories under root. Player stacks and jury files are skipped.

@@ -12,6 +12,7 @@ import (
 	"github.com/aapng-cmd/ctf_platform/internal/scoring"
 	"github.com/aapng-cmd/ctf_platform/internal/webutil"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func (a *App) Index(c *gin.Context) {
@@ -59,11 +60,6 @@ func (a *App) UsersList(c *gin.Context) {
 		a.HTML(c, http.StatusForbidden, "error.html", gin.H{"Title": "Forbidden", "Message": "User listing is not available."})
 		return
 	}
-	standings := scoring.Scoreboard(a.DB, a.Store, a.freezeFor(u), u != nil && u.IsAdmin())
-	scoreBy := map[uint]scoring.Standing{}
-	for _, s := range standings {
-		scoreBy[s.AccountID] = s
-	}
 	q := a.DB.Model(&models.User{}).Where("banned = ?", false)
 	if u == nil || !u.IsAdmin() {
 		q = q.Where("hidden = ?", false)
@@ -71,7 +67,7 @@ func (a *App) UsersList(c *gin.Context) {
 	var users []models.User
 	q.Order("name").Find(&users)
 	a.HTML(c, http.StatusOK, "users.html", gin.H{
-		"Title": "Users", "Users": users, "Scores": scoreBy, "Flashes": a.flashes(c),
+		"Title": "Users", "Users": users, "Flashes": a.flashes(c),
 	})
 }
 
@@ -91,26 +87,7 @@ func (a *App) UserDetail(c *gin.Context) {
 		a.HTML(c, http.StatusNotFound, "error.html", gin.H{"Title": "404", "Message": "User not found"})
 		return
 	}
-	var solves []models.Solve
-	q := a.DB.Preload("Challenge").Where("user_id = ?", user.ID).Order("date")
-	if fr := a.freezeFor(viewer); fr != nil {
-		q = q.Where("date <= ?", *fr)
-	}
-	q.Find(&solves)
-	var awards []models.Award
-	a.DB.Where("user_id = ?", user.ID).Order("date").Find(&awards)
-	standings := scoring.Scoreboard(a.DB, a.Store, a.freezeFor(viewer), viewer != nil && viewer.IsAdmin())
-	place := scoring.AccountPlace(standings, user.ID)
-	score := 0
-	for _, s := range standings {
-		if s.AccountID == user.ID {
-			score = s.Score
-		}
-	}
-	a.HTML(c, http.StatusOK, "user.html", gin.H{
-		"Title": user.Name, "Profile": user, "Solves": solves, "Awards": awards,
-		"Place": place, "Score": score, "Flashes": a.flashes(c),
-	})
+	a.renderProfile(c, viewer, user)
 }
 
 func (a *App) TeamsList(c *gin.Context) {
@@ -123,18 +100,13 @@ func (a *App) TeamsList(c *gin.Context) {
 		a.HTML(c, http.StatusForbidden, "error.html", gin.H{"Title": "Forbidden", "Message": "Team listing is not available."})
 		return
 	}
-	standings := scoring.Scoreboard(a.DB, a.Store, a.freezeFor(u), u != nil && u.IsAdmin())
-	scoreBy := map[uint]scoring.Standing{}
-	for _, s := range standings {
-		scoreBy[s.AccountID] = s
-	}
-	q := a.DB.Preload("Members").Where("banned = ?", false)
+	q := a.DB.Preload("Members").Preload("Roster").Where("banned = ?", false)
 	if u == nil || !u.IsAdmin() {
 		q = q.Where("hidden = ?", false)
 	}
 	var teams []models.Team
 	q.Order("name").Find(&teams)
-	a.HTML(c, http.StatusOK, "teams.html", gin.H{"Title": "Teams", "Teams": teams, "Scores": scoreBy, "Flashes": a.flashes(c)})
+	a.HTML(c, http.StatusOK, "teams.html", gin.H{"Title": "Teams", "Teams": teams, "Flashes": a.flashes(c)})
 }
 
 func (a *App) TeamDetail(c *gin.Context) {
@@ -149,7 +121,7 @@ func (a *App) TeamDetail(c *gin.Context) {
 	}
 	id, _ := strconv.Atoi(c.Param("id"))
 	var team models.Team
-	if err := a.DB.Preload("Members").First(&team, id).Error; err != nil {
+	if err := a.DB.Preload("Members").Preload("Roster").First(&team, id).Error; err != nil {
 		a.HTML(c, http.StatusNotFound, "error.html", gin.H{"Title": "404", "Message": "Team not found"})
 		return
 	}
@@ -157,22 +129,8 @@ func (a *App) TeamDetail(c *gin.Context) {
 		a.HTML(c, http.StatusNotFound, "error.html", gin.H{"Title": "404", "Message": "Team not found"})
 		return
 	}
-	var solves []models.Solve
-	q := a.DB.Preload("Challenge").Preload("User").Where("team_id = ?", team.ID).Order("date")
-	if fr := a.freezeFor(viewer); fr != nil {
-		q = q.Where("date <= ?", *fr)
-	}
-	q.Find(&solves)
-	standings := scoring.Scoreboard(a.DB, a.Store, a.freezeFor(viewer), viewer != nil && viewer.IsAdmin())
-	place := scoring.AccountPlace(standings, team.ID)
-	score := 0
-	for _, s := range standings {
-		if s.AccountID == team.ID {
-			score = s.Score
-		}
-	}
 	a.HTML(c, http.StatusOK, "team.html", gin.H{
-		"Title": team.Name, "Team": team, "Solves": solves, "Place": place, "Score": score, "Flashes": a.flashes(c),
+		"Title": team.Name, "Team": team, "Flashes": a.flashes(c),
 	})
 }
 
@@ -181,11 +139,26 @@ func (a *App) TeamNewGET(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/")
 		return
 	}
+	if !a.Store.IsAD() {
+		a.flash(c, "warning", "Teams are only open during Attack-Defense")
+		c.Redirect(http.StatusFound, "/teams")
+		return
+	}
 	a.HTML(c, http.StatusOK, "team_form.html", gin.H{"Title": "Create Team", "Mode": "create", "Flashes": a.flashes(c)})
 }
 
 func (a *App) TeamNewPOST(c *gin.Context) {
 	u := middleware.CurrentUser(c)
+	if !a.Store.IsAD() {
+		a.flash(c, "warning", "Teams are only open during Attack-Defense")
+		c.Redirect(http.StatusFound, "/teams")
+		return
+	}
+	if u.Banned {
+		a.flash(c, "danger", "You have been banned")
+		c.Redirect(http.StatusFound, "/teams")
+		return
+	}
 	if u.TeamID != nil {
 		a.flash(c, "warning", "You are already on a team")
 		c.Redirect(http.StatusFound, "/teams/"+strconv.Itoa(int(*u.TeamID)))
@@ -207,7 +180,7 @@ func (a *App) TeamNewPOST(c *gin.Context) {
 	team := models.Team{
 		Name: name, Password: hash, Website: strings.TrimSpace(c.PostForm("website")),
 		Affiliation: strings.TrimSpace(c.PostForm("affiliation")), Country: strings.TrimSpace(c.PostForm("country")),
-		Created: time.Now(),
+		Created: time.Now(), EventID: uint(a.Store.Int("ad_event_id", 0)),
 	}
 	if err := a.DB.Create(&team).Error; err != nil {
 		a.flash(c, "danger", "That team name is already taken")
@@ -220,6 +193,7 @@ func (a *App) TeamNewPOST(c *gin.Context) {
 	team.CaptainID = &u.ID
 	a.DB.Save(&team)
 	a.DB.Model(u).Update("team_id", team.ID)
+	a.rememberRoster(team.ID, u.ID, u.Name)
 	_ = ad.EnsureInstances(a.DB)
 	c.Redirect(http.StatusFound, "/teams/"+strconv.Itoa(int(team.ID)))
 }
@@ -229,11 +203,26 @@ func (a *App) TeamJoinGET(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/")
 		return
 	}
+	if !a.Store.IsAD() {
+		a.flash(c, "warning", "Teams are only open during Attack-Defense")
+		c.Redirect(http.StatusFound, "/teams")
+		return
+	}
 	a.HTML(c, http.StatusOK, "team_form.html", gin.H{"Title": "Join Team", "Mode": "join", "Flashes": a.flashes(c)})
 }
 
 func (a *App) TeamJoinPOST(c *gin.Context) {
 	u := middleware.CurrentUser(c)
+	if !a.Store.IsAD() {
+		a.flash(c, "warning", "Teams are only open during Attack-Defense")
+		c.Redirect(http.StatusFound, "/teams")
+		return
+	}
+	if u.Banned {
+		a.flash(c, "danger", "You have been banned")
+		c.Redirect(http.StatusFound, "/teams")
+		return
+	}
 	if u.TeamID != nil {
 		a.flash(c, "warning", "You are already on a team")
 		c.Redirect(http.StatusFound, "/teams/"+strconv.Itoa(int(*u.TeamID)))
@@ -247,8 +236,14 @@ func (a *App) TeamJoinPOST(c *gin.Context) {
 		return
 	}
 	var team models.Team
-	if err := a.DB.Preload("Members").Where("name = ?", name).First(&team).Error; err != nil || !webutil.CheckPassword(team.Password, password) {
+	err := a.DB.Preload("Members").Where("name = ?", name).First(&team).Error
+	if !webutil.CheckPassword(team.Password, password) || err != nil {
 		a.flash(c, "danger", "That team name or password is incorrect")
+		c.Redirect(http.StatusFound, "/teams/join")
+		return
+	}
+	if team.Banned || team.Closed || (team.EventID != 0 && team.EventID != uint(a.Store.Int("ad_event_id", 0))) {
+		a.flash(c, "danger", "That team is closed")
 		c.Redirect(http.StatusFound, "/teams/join")
 		return
 	}
@@ -257,8 +252,41 @@ func (a *App) TeamJoinPOST(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/teams/join")
 		return
 	}
+	if team.EventID == 0 {
+		a.DB.Model(&team).Update("event_id", uint(a.Store.Int("ad_event_id", 0)))
+	}
 	a.DB.Model(u).Update("team_id", team.ID)
+	a.rememberRoster(team.ID, u.ID, u.Name)
 	c.Redirect(http.StatusFound, "/teams/"+strconv.Itoa(int(team.ID)))
+}
+
+func (a *App) rememberRoster(teamID, userID uint, name string) {
+	var row models.TeamRoster
+	err := a.DB.Where("team_id = ? AND user_id = ?", teamID, userID).First(&row).Error
+	if err != nil {
+		a.DB.Create(&models.TeamRoster{TeamID: teamID, UserID: userID, Name: name})
+		return
+	}
+	if row.Name != name {
+		a.DB.Model(&row).Update("name", name)
+	}
+}
+
+// closeOpenTeams finishes every team that is still open. eventID, when set,
+// is written onto teams that were not tied to an event yet.
+func (a *App) closeOpenTeams(eventID uint) {
+	var users []models.User
+	a.DB.Where("team_id IS NOT NULL").Find(&users)
+	for _, u := range users {
+		if u.TeamID != nil {
+			a.rememberRoster(*u.TeamID, u.ID, u.Name)
+		}
+	}
+	if eventID != 0 {
+		a.DB.Model(&models.Team{}).Where("closed = ? AND event_id = ?", false, 0).Update("event_id", eventID)
+	}
+	a.DB.Model(&models.Team{}).Where("closed = ?", false).Update("closed", true)
+	a.DB.Model(&models.User{}).Where("team_id IS NOT NULL").Update("team_id", gorm.Expr("NULL"))
 }
 
 func (a *App) ScoreboardPage(c *gin.Context) {
@@ -267,13 +295,12 @@ func (a *App) ScoreboardPage(c *gin.Context) {
 		a.HTML(c, http.StatusForbidden, "error.html", gin.H{"Title": "Scoreboard", "Message": "Scoreboard is not available."})
 		return
 	}
-	standings := scoring.Scoreboard(a.DB, a.Store, a.freezeFor(u), u != nil && u.IsAdmin())
+	standings := scoring.UserScoreboard(a.DB, nil, u != nil && u.IsAdmin())
 	var adStandings []scoring.ADStanding
 	if a.Store.IsAD() {
 		adStandings = a.adBoard(u != nil && u.IsAdmin()).Teams
 	}
-	frozen := a.Store.Freeze() != nil && (u == nil || !u.IsAdmin())
 	a.HTML(c, http.StatusOK, "scoreboard.html", gin.H{
-		"Title": "Scoreboard", "Standings": standings, "ADStandings": adStandings, "Frozen": frozen, "Flashes": a.flashes(c),
+		"Title": "Scoreboard", "Standings": standings, "ADStandings": adStandings, "Flashes": a.flashes(c),
 	})
 }

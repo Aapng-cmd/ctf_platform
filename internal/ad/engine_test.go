@@ -144,6 +144,7 @@ func TestRoundFlipDoesNotWaitForCheckers(t *testing.T) {
 	st := store.New(db)
 	if err := st.SetMany(map[string]string{
 		"game_mode":        models.GameAttackDefense,
+		"ad_running":       "true",
 		"ad_round_seconds": "15",
 		"ad_paused":        "false",
 	}); err != nil {

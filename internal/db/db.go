@@ -45,16 +45,31 @@ func Open(cfg config.Config) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	sqlDB.SetMaxIdleConns(8)
-	sqlDB.SetMaxOpenConns(32)
+	open := cfg.DBMaxOpen
+	if open <= 0 {
+		open = 32
+	}
+	if open < 4 {
+		open = 4
+	}
+	if open > 128 {
+		open = 128
+	}
+	idle := 8
+	if idle > open {
+		idle = open
+	}
+	sqlDB.SetMaxIdleConns(idle)
+	sqlDB.SetMaxOpenConns(open)
 	sqlDB.SetConnMaxLifetime(time.Hour)
 	return gdb, nil
 }
 
 func Migrate(gdb *gorm.DB) error {
-	return gdb.AutoMigrate(
+	err := gdb.AutoMigrate(
 		&models.User{},
 		&models.Team{},
+		&models.TeamRoster{},
 		&models.Challenge{},
 		&models.Flag{},
 		&models.Hint{},
@@ -74,5 +89,16 @@ func Migrate(gdb *gorm.DB) error {
 		&models.ADRound{},
 		&models.ADSteal{},
 		&models.ADCheck{},
+		&models.ADEvent{},
+		&models.ADSnapshot{},
+		&models.ADAdjust{},
+		&models.ADCoeff{},
+		&models.Achievement{},
+		&models.UserAchievement{},
+		&models.ADResult{},
 	)
+	if err != nil {
+		return err
+	}
+	return models.SeedAchievements(gdb)
 }

@@ -39,6 +39,21 @@ func DynamicValue(ch models.Challenge, solves int) int {
 	return out
 }
 
+// Awarded is the points a solved challenge adds. Revealed hint costs are
+// subtracted from that challenge only, and the result is never negative.
+func Awarded(value, hintCost int) int {
+	if value <= 0 {
+		return 0
+	}
+	if hintCost <= 0 {
+		return value
+	}
+	if hintCost >= value {
+		return 0
+	}
+	return value - hintCost
+}
+
 func RecalcChallenge(db *gorm.DB, ch *models.Challenge) error {
 	if ch.Type != models.ChallengeDynamic {
 		return nil
@@ -69,6 +84,15 @@ type accountAgg struct {
 }
 
 func Scoreboard(db *gorm.DB, cfg *store.Store, freeze *time.Time, includeHidden bool) []Standing {
+	return buildScoreboard(db, freeze, includeHidden, cfg != nil && cfg.IsTeams())
+}
+
+// UserScoreboard ranks players, not teams. The public Jeopardy table links to profiles.
+func UserScoreboard(db *gorm.DB, freeze *time.Time, includeHidden bool) []Standing {
+	return buildScoreboard(db, freeze, includeHidden, false)
+}
+
+func buildScoreboard(db *gorm.DB, freeze *time.Time, includeHidden bool, teams bool) []Standing {
 	type solveRow struct {
 		ChallengeID uint
 		UserID      uint
@@ -89,14 +113,15 @@ func Scoreboard(db *gorm.DB, cfg *store.Store, freeze *time.Time, includeHidden 
 		Select("solves.challenge_id, solves.user_id, solves.team_id, solves.date, challenges.value, users.hidden as user_hidden, users.banned as user_banned, users.name as user_name, users.affiliation as user_aff, teams.hidden as team_hidden, teams.banned as team_banned, teams.name as team_name, teams.affiliation as team_aff").
 		Joins("JOIN challenges ON challenges.id = solves.challenge_id").
 		Joins("JOIN users ON users.id = solves.user_id").
-		Joins("LEFT JOIN teams ON teams.id = solves.team_id")
+		Joins("LEFT JOIN teams ON teams.id = solves.team_id").
+		Where("challenges.state = ?", models.StateVisible)
 	if freeze != nil {
 		q = q.Where("solves.date <= ?", *freeze)
 	}
 	var rows []solveRow
 	q.Scan(&rows)
+	costs := hintCosts(db)
 
-	teams := cfg.IsTeams()
 	aggs := map[uint]*accountAgg{}
 	for _, r := range rows {
 		var id uint
@@ -124,7 +149,7 @@ func Scoreboard(db *gorm.DB, cfg *store.Store, freeze *time.Time, includeHidden 
 			a = &accountAgg{id: id, name: name, affiliation: aff}
 			aggs[id] = a
 		}
-		a.score += r.Value
+		a.score += Awarded(r.Value, costs[[2]uint{r.UserID, r.ChallengeID}])
 		a.solves++
 		if r.Date.After(a.last) {
 			a.last = r.Date
@@ -180,30 +205,6 @@ func Scoreboard(db *gorm.DB, cfg *store.Store, freeze *time.Time, includeHidden 
 		a.score += r.Value
 		if r.Date.After(a.last) {
 			a.last = r.Date
-		}
-	}
-
-	type unlockRow struct {
-		UserID uint
-		TeamID *uint
-		Cost   int
-	}
-	var unlocks []unlockRow
-	db.Table("unlocks").
-		Select("unlocks.user_id, unlocks.team_id, hints.cost").
-		Joins("JOIN hints ON hints.id = unlocks.target").
-		Where("unlocks.type = ?", models.UnlockHint).
-		Scan(&unlocks)
-	for _, r := range unlocks {
-		id := r.UserID
-		if teams {
-			if r.TeamID == nil {
-				continue
-			}
-			id = *r.TeamID
-		}
-		if a := aggs[id]; a != nil {
-			a.score -= r.Cost
 		}
 	}
 
@@ -274,6 +275,37 @@ func SolvedIDs(db *gorm.DB, userID uint, teamID *uint, teams bool) map[uint]bool
 	out := map[uint]bool{}
 	for _, id := range ids {
 		out[id] = true
+	}
+	return out
+}
+
+func hintCosts(db *gorm.DB) map[[2]uint]int {
+	type row struct {
+		UserID      uint
+		ChallengeID uint
+		Cost        int
+	}
+	var rows []row
+	db.Table("unlocks").
+		Select("unlocks.user_id as user_id, hints.challenge_id as challenge_id, SUM(hints.cost) as cost").
+		Joins("JOIN hints ON hints.id = unlocks.target").
+		Where("unlocks.type = ?", models.UnlockHint).
+		Group("unlocks.user_id, hints.challenge_id").
+		Scan(&rows)
+	out := make(map[[2]uint]int, len(rows))
+	for _, r := range rows {
+		out[[2]uint{r.UserID, r.ChallengeID}] = r.Cost
+	}
+	return out
+}
+
+// HintCosts is the total cost of hints this user has opened, by challenge.
+func HintCosts(db *gorm.DB, userID uint) map[uint]int {
+	out := map[uint]int{}
+	for key, cost := range hintCosts(db) {
+		if key[0] == userID {
+			out[key[1]] = cost
+		}
 	}
 	return out
 }

@@ -135,7 +135,7 @@ func SecurityHeaders() gin.HandlerFunc {
 	}
 }
 
-func CSRF() gin.HandlerFunc {
+func CSRF(cfg *store.Store) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		s := sessions.Default(c)
 		token, _ := s.Get("csrf").(string)
@@ -146,10 +146,10 @@ func CSRF() gin.HandlerFunc {
 		}
 		c.Set("csrf", token)
 		if c.Request.Method == http.MethodPost || c.Request.Method == http.MethodPut || c.Request.Method == http.MethodPatch || c.Request.Method == http.MethodDelete {
-			// Scripts submit Attack-Defense flags with X-Team-Token and no cookie.
-			// A cross-site page cannot add that header, so this request is not CSRF.
-			// Cookie-authenticated API calls still need the CSRF token.
-			if strings.TrimSpace(c.GetHeader("X-Team-Token")) != "" {
+			// Only flag submission from a script skips CSRF, and only when that
+			// script sends X-Team-Token. Every other route still requires the token.
+			// A finished /setup has nothing to protect: the handler answers 404.
+			if skipFlagCSRF(c) || (c.Request.URL.Path == "/setup" && cfg != nil && cfg.SetupComplete()) {
 				c.Next()
 				return
 			}
@@ -164,6 +164,18 @@ func CSRF() gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+// skipFlagCSRF is the Attack-Defense flag endpoint called with a team token.
+// A browser form posts to the same path with the session CSRF token and no header.
+func skipFlagCSRF(c *gin.Context) bool {
+	if c.Request.Method != http.MethodPost && c.Request.Method != http.MethodPut {
+		return false
+	}
+	if strings.TrimSpace(c.GetHeader("X-Team-Token")) == "" {
+		return false
+	}
+	return c.Request.URL.Path == "/api/v1/ad/flags"
 }
 
 func asUint(v any) uint {

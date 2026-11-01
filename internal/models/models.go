@@ -2,6 +2,7 @@ package models
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -89,6 +90,7 @@ type User struct {
 	Verified    bool      `gorm:"default:true" json:"verified"`
 	TeamID      *uint     `gorm:"index" json:"team_id"`
 	Team        *Team     `gorm:"constraint:OnDelete:SET NULL;" json:"team,omitempty"`
+	Avatar      string    `gorm:"size:64" json:"-"`
 	Created     time.Time `json:"created"`
 }
 
@@ -111,9 +113,24 @@ type Team struct {
 	// ADToken authenticates Attack-Defense flag submission from scripts (X-Team-Token).
 	ADToken string `gorm:"size:64;index" json:"-"`
 	// ADHost is the team's vulnbox. Every service of that team uses this address and the service port.
-	ADHost  string `gorm:"size:255" json:"ad_host"`
-	Members []User `gorm:"foreignKey:TeamID" json:"members,omitempty"`
+	ADHost string `gorm:"size:255" json:"ad_host"`
+	// EventID is the Attack-Defense event this team was created for. Closed teams
+	// cannot be joined again; the next event needs a new team.
+	EventID uint         `gorm:"index" json:"event_id"`
+	Closed  bool         `gorm:"default:false;index" json:"closed"`
+	Members []User       `gorm:"foreignKey:TeamID" json:"members,omitempty"`
+	Roster  []TeamRoster `gorm:"foreignKey:TeamID;constraint:OnDelete:CASCADE;" json:"roster,omitempty"`
 }
+
+// TeamRoster keeps who played on a team after the event ends and membership is cleared.
+type TeamRoster struct {
+	ID     uint   `gorm:"primaryKey" json:"id"`
+	TeamID uint   `gorm:"uniqueIndex:idx_roster;not null" json:"team_id"`
+	UserID uint   `gorm:"uniqueIndex:idx_roster;not null" json:"user_id"`
+	Name   string `gorm:"size:128" json:"name"`
+}
+
+func (TeamRoster) TableName() string { return "team_roster" }
 
 func (Team) TableName() string { return "teams" }
 
@@ -144,6 +161,18 @@ type Challenge struct {
 }
 
 func (Challenge) TableName() string { return "challenges" }
+
+// Listed is a challenge players can open. A task with Docker stays off the
+// board until that stack is running. Hiding it takes it off even if it is running.
+func (c Challenge) Listed() bool {
+	if c.State != StateVisible {
+		return false
+	}
+	if strings.TrimSpace(c.ComposeDir) == "" {
+		return true
+	}
+	return c.DeployStatus == "running"
+}
 
 func (c Challenge) RequiredIDs() []uint {
 	if c.Requirements == "" {
@@ -393,6 +422,90 @@ type ADCheck struct {
 }
 
 func (ADCheck) TableName() string { return "ad_checks" }
+
+// ADEvent is one Attack-Defense run. Stopping it, not pausing it, closes the row.
+type ADEvent struct {
+	ID      uint       `gorm:"primaryKey" json:"id"`
+	Started time.Time  `json:"started"`
+	Ended   *time.Time `json:"ended"`
+}
+
+func (ADEvent) TableName() string { return "ad_events" }
+
+// ADSnapshot is the public dashboard after a round. It keeps team names and scores, not addresses.
+type ADSnapshot struct {
+	ID      uint      `gorm:"primaryKey" json:"id"`
+	EventID uint      `gorm:"uniqueIndex:idx_ad_snap;index;not null" json:"event_id"`
+	Round   int       `gorm:"uniqueIndex:idx_ad_snap;not null" json:"round"`
+	Board   string    `gorm:"type:text" json:"-"`
+	Taken   time.Time `json:"taken"`
+}
+
+func (ADSnapshot) TableName() string { return "ad_snapshots" }
+
+// ADAdjust is points an admin added or removed during the live event.
+// It is not multiplied by the SLA reward.
+type ADAdjust struct {
+	ID     uint `gorm:"primaryKey" json:"id"`
+	TeamID uint `gorm:"uniqueIndex;not null" json:"team_id"`
+	Points int  `json:"points"`
+}
+
+func (ADAdjust) TableName() string { return "ad_adjusts" }
+
+// ADCoeff is one saved set of round coefficients. A new row is written only when
+// the numbers change, so an archive can show every change made during the event.
+type ADCoeff struct {
+	ID           uint      `gorm:"primaryKey" json:"-"`
+	EventID      uint      `gorm:"index;not null" json:"-"`
+	Round        int       `json:"round"`
+	Attack       int       `json:"attack"`
+	Defense      int       `json:"defense"`
+	Lost         int       `json:"lost"`
+	SLA          int       `json:"sla"`
+	Down         int       `json:"down"`
+	RoundSeconds int       `json:"round_seconds"`
+	FlagLife     int       `json:"flag_life"`
+	At           time.Time `json:"at"`
+}
+
+func (ADCoeff) TableName() string { return "ad_coeffs" }
+
+// ADResult is one player's place in a finished Attack-Defense event.
+type ADResult struct {
+	ID       uint    `gorm:"primaryKey" json:"id"`
+	EventID  uint    `gorm:"uniqueIndex:idx_ad_result;index;not null" json:"event_id"`
+	UserID   uint    `gorm:"uniqueIndex:idx_ad_result;index;not null" json:"user_id"`
+	TeamName string  `gorm:"size:128" json:"team_name"`
+	Place    int     `json:"place"`
+	Field    int     `json:"field"`
+	Points   int     `json:"points"`
+	Event    ADEvent `gorm:"constraint:OnDelete:CASCADE;" json:"-"`
+	User     User    `gorm:"constraint:OnDelete:CASCADE;" json:"-"`
+}
+
+func (ADResult) TableName() string { return "ad_results" }
+
+// Achievement is a favorite-category title. The rows live in the database.
+type Achievement struct {
+	ID       uint   `gorm:"primaryKey" json:"id"`
+	Key      string `gorm:"size:32;uniqueIndex;not null" json:"key"`
+	Title    string `gorm:"size:80;not null" json:"title"`
+	Category string `gorm:"size:80;not null" json:"category"`
+}
+
+func (Achievement) TableName() string { return "achievements" }
+
+// UserAchievement is the player's current favorite-category title.
+type UserAchievement struct {
+	ID            uint        `gorm:"primaryKey" json:"id"`
+	UserID        uint        `gorm:"uniqueIndex;not null" json:"user_id"`
+	AchievementID uint        `gorm:"index;not null" json:"achievement_id"`
+	Achievement   Achievement `gorm:"constraint:OnDelete:CASCADE;" json:"achievement,omitempty"`
+	User          User        `gorm:"constraint:OnDelete:CASCADE;" json:"-"`
+}
+
+func (UserAchievement) TableName() string { return "user_achievements" }
 
 type Account struct {
 	ID          uint

@@ -52,10 +52,41 @@ document.addEventListener("submit", function (e) {
 (function () {
   document.addEventListener("input", function (e) {
     if (!e.target || e.target.id !== "chal-search") return;
-    const q = e.target.value.toLowerCase();
-    document.querySelectorAll(".chal-card").forEach(function (el) {
-      el.style.display = el.dataset.name.toLowerCase().includes(q) ? "" : "none";
+    const q = e.target.value.toLowerCase().trim();
+    document.querySelectorAll(".chal-cat").forEach(function (cat) {
+      let any = false;
+      cat.querySelectorAll(".chal-card").forEach(function (el) {
+        const show = !q || (el.dataset.name || "").toLowerCase().includes(q);
+        el.style.display = show ? "" : "none";
+        if (show) any = true;
+      });
+      const body = cat.querySelector(".chal-cat-body");
+      const toggle = cat.querySelector(".category-toggle");
+      if (!body || !toggle) return;
+      if (!q) {
+        body.hidden = true;
+        toggle.setAttribute("aria-expanded", "false");
+        return;
+      }
+      body.hidden = !any;
+      toggle.setAttribute("aria-expanded", any ? "true" : "false");
     });
+  });
+
+  document.addEventListener("click", function (e) {
+    const find = e.target.closest && e.target.closest("#find-me");
+    if (find) {
+      const row = document.getElementById("score-me");
+      if (row) row.scrollIntoView({ block: "center", behavior: "smooth" });
+      return;
+    }
+    const toggle = e.target.closest && e.target.closest(".category-toggle");
+    if (!toggle) return;
+    const body = toggle.parentElement && toggle.parentElement.querySelector(".chal-cat-body");
+    if (!body) return;
+    const open = toggle.getAttribute("aria-expanded") === "true";
+    toggle.setAttribute("aria-expanded", open ? "false" : "true");
+    body.hidden = open;
   });
 
   let currentId = null;
@@ -106,6 +137,9 @@ document.addEventListener("submit", function (e) {
       wrap.className = "mb-2";
       if (h.unlocked) {
         wrap.innerHTML = "<div class='alert alert-secondary mb-0'><strong>" + escapeHtml(h.title || t("challenges.hint")) + "</strong><div>" + escapeHtml(h.content || "") + "</div></div>";
+      } else if (d.solved_by_me) {
+        wrap.className = "mb-2 text-muted";
+        wrap.textContent = (h.title || t("challenges.hint")) + " (" + h.cost + " " + t("challenges.pts") + ")";
       } else {
         const b = document.createElement("button");
         b.className = "btn btn-sm btn-outline-warning";
@@ -160,7 +194,14 @@ document.addEventListener("submit", function (e) {
       body: JSON.stringify({ target: id, type: "hints" })
     });
     const json = await res.json();
-    if (json.success) openChallenge(currentId);
+    if (json.success) {
+      openChallenge(currentId);
+      return;
+    }
+    const box = document.getElementById("flagMsg");
+    if (box) {
+      box.innerHTML = "<div class='alert alert-danger'>" + escapeHtml((json.errors || ["Error"]).map(function (m) { return window.tr ? window.tr(m) : m; }).join(", ")) + "</div>";
+    }
   }
 
   function t(key) {
@@ -552,10 +593,21 @@ document.addEventListener("submit", function (e) {
       window.__adDash.forEach(clearInterval);
       window.__adDash = null;
     }
+    if (window.__adPlay) {
+      clearTimeout(window.__adPlay);
+      window.__adPlay = 0;
+    }
+    if (window.__adPlayTick) {
+      clearInterval(window.__adPlayTick);
+      window.__adPlayTick = 0;
+    }
     if (window.__adAttack) {
       window.__adAttack.forEach(clearInterval);
       window.__adAttack = null;
     }
+    document.querySelectorAll("#ad-dashboard-data, #ad-archive-data").forEach(function (node) {
+      if (!node.closest("main")) node.remove();
+    });
     document.querySelectorAll("script[data-page-script]").forEach(function (s) { s.remove(); });
     const pageSrc = doc.querySelector("script[data-page-script]");
     if (pageSrc && pageSrc.getAttribute("src")) {

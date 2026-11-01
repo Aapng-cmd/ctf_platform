@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -63,7 +64,19 @@ func (a *App) LoadTemplates() error {
 			}
 			return t.In(a.Store.Location()).Format("02.01.2006 15:04:05")
 		},
-		"formatDate": func(t time.Time) string {
+		"formatDate": func(v any) string {
+			var t time.Time
+			switch x := v.(type) {
+			case time.Time:
+				t = x
+			case *time.Time:
+				if x == nil {
+					return ""
+				}
+				t = *x
+			default:
+				return ""
+			}
 			if t.IsZero() {
 				return ""
 			}
@@ -82,14 +95,31 @@ func (a *App) LoadTemplates() error {
 			}
 			return s
 		},
-		"eq":       func(a, b any) bool { return a == b },
-		"has":      func(m map[uint]bool, id uint) bool { return m[id] },
-		"adKey":    func(tid, sid uint) string { return fmt.Sprintf("%d:%d", tid, sid) },
-		"idEq":     func(id *uint, other uint) bool { return id != nil && *id == other },
-		"lower":    strings.ToLower,
-		"trim":     strings.TrimSpace,
-		"split":    strings.Split,
-		"contains": strings.Contains,
+		"eq":        func(a, b any) bool { return a == b },
+		"has":       func(m map[uint]bool, id uint) bool { return m[id] },
+		"adKey":     func(tid, sid uint) string { return fmt.Sprintf("%d:%d", tid, sid) },
+		"idEq":      func(id *uint, other uint) bool { return id != nil && *id == other },
+		"lower":     strings.ToLower,
+		"trim":      strings.TrimSpace,
+		"split":     strings.Split,
+		"contains":  strings.Contains,
+		"hasPrefix": strings.HasPrefix,
+		"json": func(v any) template.JS {
+			b, err := json.Marshal(v)
+			if err != nil {
+				return "null"
+			}
+			return template.JS(b)
+		},
+		"signed": func(n int) string {
+			if n > 0 {
+				return fmt.Sprintf("+ %d", n)
+			}
+			if n < 0 {
+				return fmt.Sprintf("- %d", -n)
+			}
+			return "0"
+		},
 		"dict": func(values ...any) map[string]any {
 			m := map[string]any{}
 			for i := 0; i+1 < len(values); i += 2 {
@@ -145,6 +175,7 @@ func (a *App) HTML(c *gin.Context, code int, name string, data gin.H) {
 	var pages []models.Page
 	a.DB.Where("draft = ? AND hidden = ? AND route <> ?", false, false, "index").Order("id").Find(&pages)
 	data["NavPages"] = pages
+	c.Status(code)
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	if err := a.tmpl.ExecuteTemplate(c.Writer, name, data); err != nil {
 		c.String(http.StatusInternalServerError, "template error: %v", err)

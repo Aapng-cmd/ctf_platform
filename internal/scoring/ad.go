@@ -1,6 +1,7 @@
 package scoring
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/aapng-cmd/ctf_platform/internal/models"
@@ -37,10 +38,24 @@ type ADStanding struct {
 	Lost        int             `json:"lost"`
 	Down        int             `json:"down"`
 	Score       int             `json:"score"`
+	Adjust      int             `json:"adjust"`
 	Place       int             `json:"pos"`
 	Affiliation string          `json:"affiliation"`
-	Host        string          `json:"host"`
+	Host        string          `json:"host,omitempty"`
 	Services    []ADServiceCell `json:"services"`
+}
+
+// ScoreLabel is the standing total. Admin points are added once, not through SLA,
+// and shown beside the total only when they are not zero.
+func (s ADStanding) ScoreLabel() string {
+	total := s.Score + s.Adjust
+	if s.Adjust == 0 {
+		return fmt.Sprintf("%d", total)
+	}
+	if s.Adjust > 0 {
+		return fmt.Sprintf("%d (+ %d)", total, s.Adjust)
+	}
+	return fmt.Sprintf("%d (- %d)", total, -s.Adjust)
 }
 
 type ADBoardService struct {
@@ -161,6 +176,14 @@ func ADDashboard(db *gorm.DB, defended map[[2]uint]int, includeHidden bool, rewa
 			cell(ch.TeamID, ch.ServiceID).History[slot[ch.RoundID]] = ch.Status
 		}
 	}
+	adjust := map[uint]int{}
+	var rows []models.ADAdjust
+	if err := db.Find(&rows).Error; err == nil {
+		for _, row := range rows {
+			adjust[row.TeamID] = row.Points
+		}
+	}
+
 	var latest []models.ADCheck
 	db.Where("id IN (?)", db.Model(&models.ADCheck{}).Select("MAX(id)").Group("team_id, service_id")).Find(&latest)
 	for _, ch := range latest {
@@ -179,7 +202,7 @@ func ADDashboard(db *gorm.DB, defended map[[2]uint]int, includeHidden bool, rewa
 		}
 	}
 	for _, t := range teams {
-		st := ADStanding{AccountID: t.ID, Name: t.Name, Affiliation: t.Affiliation, Host: t.ADHost, Services: []ADServiceCell{}}
+		st := ADStanding{AccountID: t.ID, Name: t.Name, Affiliation: t.Affiliation, Host: t.ADHost, Adjust: adjust[t.ID], Services: []ADServiceCell{}}
 		for _, s := range svcs {
 			cv := *cell(t.ID, s.ID)
 			if !hosted[key{t.ID, s.ID}] {
@@ -200,8 +223,8 @@ func ADDashboard(db *gorm.DB, defended map[[2]uint]int, includeHidden bool, rewa
 	}
 	sort.Slice(board.Teams, func(i, j int) bool {
 		a, b := board.Teams[i], board.Teams[j]
-		if a.Score != b.Score {
-			return a.Score > b.Score
+		if a.Score+a.Adjust != b.Score+b.Adjust {
+			return a.Score+a.Adjust > b.Score+b.Adjust
 		}
 		if a.Attack != b.Attack {
 			return a.Attack > b.Attack

@@ -2,8 +2,10 @@
 {{template "navbar" .}}
 {{template "flashes" .}}
 <main class="container py-4">
-  <h2 data-i18n="score.title">Scoreboard</h2>
-  {{if .Frozen}}<div class="alert alert-info" data-i18n="score.frozen">The scoreboard is frozen.</div>{{end}}
+  <div class="page-head">
+    <h2 data-i18n="score.title">Scoreboard</h2>
+    {{if .User}}<button type="button" class="btn btn-sm btn-outline-light" id="find-me" data-i18n="score.findMe">Find me</button>{{end}}
+  </div>
 
   {{if .IsAD}}
   <div class="page-head mt-4">
@@ -25,7 +27,7 @@
           <td>{{.SLA}}</td>
           <td>{{if .Lost}}−{{.Lost}}{{else}}0{{end}}</td>
           <td>{{if .Down}}−{{.Down}}{{else}}0{{end}}</td>
-          <td><strong>{{.Score}}</strong></td>
+          <td><strong>{{.ScoreLabel}}</strong></td>
         </tr>
         {{else}}
         <tr><td colspan="8" class="text-muted" data-i18n="score.empty">No scores yet.</td></tr>
@@ -37,21 +39,16 @@
 
   {{if .IsJeopardy}}
   {{if .IsAD}}<h4 data-i18n="score.jeopardy">Jeopardy</h4>{{end}}
-  <div class="chart-box"><canvas id="scoregraph"></canvas></div>
   <div class="table-responsive">
     <table class="table table-striped align-middle">
       <thead>
-        <tr><th data-i18n="score.place">Place</th><th>{{if .IsTeams}}<span data-i18n="score.team">Team</span>{{else}}<span data-i18n="score.user">User</span>{{end}}</th><th data-i18n="score.score">Score</th><th data-i18n="admin.solves">Solves</th></tr>
+        <tr><th data-i18n="score.place">Place</th><th data-i18n="score.user">User</th><th data-i18n="score.score">Score</th><th data-i18n="admin.solves">Solves</th></tr>
       </thead>
       <tbody>
         {{range .Standings}}
-        <tr>
+        <tr {{if and $.User (eq .AccountID $.User.ID)}}id="score-me" class="score-me"{{end}}>
           <td>{{.Place}}</td>
-          <td>
-            {{if $.IsTeams}}<a href="/teams/{{.AccountID}}">{{.Name}}</a>
-            {{else}}<a href="/users/{{.AccountID}}">{{.Name}}</a>{{end}}
-            {{if .Affiliation}}<div class="small text-muted" hidden>{{.Affiliation}}</div>{{end}}
-          </td>
+          <td><a href="/users/{{.AccountID}}">{{.Name}}</a></td>
           <td>{{.Score}}</td>
           <td>{{.Solves}}</td>
         </tr>

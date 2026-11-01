@@ -24,6 +24,11 @@ type Config struct {
 	CookieSecure   bool
 	PublicURL      string
 	TrustedProxies []string
+	// RunEngine is true on the single process that advances Attack-Defense rounds.
+	// Extra web copies set AD_ENGINE=false and must not receive the Docker socket.
+	RunEngine bool
+	// DBMaxOpen is this process's database pool, clamped to 4..128.
+	DBMaxOpen int
 }
 
 func getenv(key, fallback string) string {
@@ -71,7 +76,27 @@ func Load() Config {
 		CookieSecure:   IsTruthy(os.Getenv("COOKIE_SECURE")),
 		PublicURL:      strings.TrimRight(os.Getenv("PUBLIC_URL"), "/"),
 		TrustedProxies: splitList(os.Getenv("TRUSTED_PROXIES")),
+		RunEngine:      envDefaultTrue("AD_ENGINE"),
+		DBMaxOpen:      clamp(EnvInt("DB_MAX_OPEN", 32), 4, 128),
 	}
+}
+
+func envDefaultTrue(key string) bool {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return true
+	}
+	return IsTruthy(v)
+}
+
+func clamp(n, lo, hi int) int {
+	if n < lo {
+		return lo
+	}
+	if n > hi {
+		return hi
+	}
+	return n
 }
 
 func splitList(v string) []string {

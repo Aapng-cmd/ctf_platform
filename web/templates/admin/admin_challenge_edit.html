@@ -118,7 +118,11 @@
       <h5 class="mb-0"><span data-i18n="admin.deploy">Deploy</span>: <span class="deploy-status badge-status {{if .Challenge.DeployStatus}}badge-{{.Challenge.DeployStatus}}{{end}}" data-deploy-kind="challenge" data-deploy-id="{{.Challenge.ID}}" {{if .Challenge.DeployStatus}}data-i18n="deploy.{{.Challenge.DeployStatus}}"{{end}}>{{if .Challenge.DeployStatus}}{{.Challenge.DeployStatus}}{{else}}—{{end}}</span></h5>
       <div class="d-flex gap-2">
         <form method="post" action="/admin/challenges/{{.Challenge.ID}}/redeploy"><input type="hidden" name="nonce" value="{{.CSRF}}"><button class="btn btn-sm btn-primary" type="submit" data-i18n="admin.redeploy">Redeploy</button></form>
-        <form method="post" action="/admin/challenges/{{.Challenge.ID}}/stop"><input type="hidden" name="nonce" value="{{.CSRF}}"><button class="btn btn-sm btn-outline-warning" type="submit" data-i18n="admin.stop">Stop</button></form>
+        {{if eq .Challenge.State "visible"}}
+        <form method="post" action="/admin/challenges/{{.Challenge.ID}}/hide"><input type="hidden" name="nonce" value="{{.CSRF}}"><button class="btn btn-sm btn-outline-warning" type="submit" data-i18n="admin.hide">Hide</button></form>
+        {{else}}
+        <form method="post" action="/admin/challenges/{{.Challenge.ID}}/show"><input type="hidden" name="nonce" value="{{.CSRF}}"><button class="btn btn-sm btn-outline-light" type="submit" data-i18n="admin.show">Show</button></form>
+        {{end}}
       </div>
     </div>
     <p class="text-muted small mb-2">{{.Challenge.ComposeDir}}</p>

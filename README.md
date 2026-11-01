@@ -1,12 +1,12 @@
 # CTF Platform
 
-A CTFd-like Capture The Flag platform rewritten in **Go + Gin**. It keeps the familiar CTFd event flow: setup wizard, users or teams, challenge board, scoreboard, notifications, pages, and an admin panel.
+A CTFd-like Capture The Flag platform rewritten in **Go + Gin**. It keeps the familiar CTFd event flow: setup wizard, teams, challenge board, scoreboard, notifications, pages, and an admin panel.
 
 Swagger / OpenAPI UI is **closed to the public** and only answers from **localhost**.
 
 ## Features
 
-- Setup wizard (event name, users/teams mode, start/end, first admin)
+- Setup wizard (event name, description, timezone, first admin)
 - Registration, login, profiles, settings
 - Team create/join with password and optional size limit
 - Challenges: categories, markdown, files, connection info, tags, prerequisites
@@ -15,7 +15,7 @@ Swagger / OpenAPI UI is **closed to the public** and only answers from **localho
 - Unlockable hints that cost points
 - Attempt limits and per-user rate limiting
 - First blood, awards, hidden/banned accounts
-- Scoreboard with freeze and top-10 graph
+- Scoreboard
 - Attack-Defense mode (rounds, SLA checks, stolen flags). Round flags live in Redis
 - Pages CMS and broadcast notifications
 - Admin: statistics, challenges, users, teams, submissions, scoreboard, pages, awards, config, reset
@@ -66,7 +66,7 @@ Any non-loopback client receives `403`.
 
 1. Finish setup and sign in as admin
 2. Upload Jeopardy or Attack-Defense archives (below), or create a challenge by hand
-3. Optionally set start/end/freeze and visibility under **Config**
+3. Optionally set visibility under **Config**
 4. Players register, solve challenges, and appear on the scoreboard
 
 The site UI has an **EN / RU** switch in the navbar. The choice is stored in the browser (`localStorage`, key `ctf_lang`).
@@ -92,19 +92,21 @@ hints:
 connection_info: ""
 ```
 
-`README.md` uses headings: `# title`, then `## Category`, `## Description`, `## Cost` (or `Value`), `## Flag`, `## Files` (paths separated by `;`), `## Hints` (`text|cost` per line), `## Attribution`, `## Connection`.
+`README.md` uses headings: `# title`, then `## Category`, `## Description`, `## Cost` (or `Value`), `## Flag`, `## Files` (paths separated by `;`), `## Hints` (`text|cost` per line), `## Attribution`, `## Connection`. A `hints.json` file (`{"hints":[{"hint":"...","cost":5}]}`) replaces those hints. Every hint starts closed. Opening one keeps it open. After a correct flag, opened hints stay as they are and no further hint can be opened. Their costs come off that challenge's points, and the challenge is never worth less than zero.
 
-If `docker-compose.yml` (or `compose.yml`) is present, the platform runs `docker compose up -d --build` in that directory. The connection shown to players is `PUBLIC_HOST` plus the first published host port of a non-checker service. `PUBLIC_HOST` defaults to `127.0.0.1`.
+If `docker-compose.yml` (or `compose.yml`) is present, the platform runs `docker compose up -d --build` in that directory. The task stays off the challenge board until that build is running. The connection shown to players is `PUBLIC_HOST` plus the first published host port of a non-checker service. `PUBLIC_HOST` defaults to `127.0.0.1`.
+
+On **Admin → Challenges**, a task can be rebuilt, hidden or deleted. Hiding runs `docker compose down` and drops its points until it is shown again. Deleting runs `docker compose down -v` and prunes that project's containers, volumes and images, and the points stay gone.
 
 Deploy needs Docker on the host that runs the app. The Compose file mounts `/var/run/docker.sock` into the web container, and the image installs `docker.io` and `docker-compose`. Give this socket only to an admin you trust: it can start containers on the host.
 
-Stopping or removing the platform container (`docker stop`, `docker compose stop`, `docker compose down`) first stops and removes every task stack the platform started. The web service waits up to 2 minutes for that teardown (`stop_grace_period`) before Docker kills it. Task rows in the admin panel are marked `stopped`. Start them again with **Redeploy**.
+Stopping or removing the platform container (`docker stop`, `docker compose stop`, `docker compose down`) first stops the checkers and the Jeopardy task stacks the platform started. The web service waits up to 2 minutes for that teardown (`stop_grace_period`) before Docker kills it. Task rows in the admin panel are marked `stopped`. Start them again with **Redeploy** or **Show**.
 
 ## Attack-Defense
 
 The operator guide is in [README_en.md](README_en.md) and [README_ru.md](README_ru.md).
 
-Set **Game Mode** to `Attack-Defense` or `Mixed` (teams are required). The archive uploaded under **Admin → Attack-Defense** starts a checker only; the vulnerable service is not started from that zip. Then create a service with a name, a port and that running checker, and set one host per team. The service is placed on every host at the service port. One checker serves every team, and each team receives its own flags. Attack, defense, lost flag, SLA and downtime points are event-wide settings, not fields of a service. Name, port and checker can be changed after the service exists.
+Jeopardy is always available. Attack-Defense is a separate event: start and stop it from **Admin → Attack-Defense**. Pause does not archive it. Stop saves the dashboard by round, without team addresses, and stops and removes the checkers. Checkers are not stored in the archive. The archive replays that dashboard round by round or at 1x, 2x and 4x, and lists every change of the round coefficients. The archive uploaded under **Admin → Attack-Defense** starts a checker only; the vulnerable service is not started from that zip. Then create a service with a name, a port and that running checker, and set one host per team. The service is placed on every host at the service port. One checker serves every team, and each team receives its own flags. Attack, defense, lost flag, SLA and downtime points are event-wide settings, not fields of a service. Name, port and checker can be changed after the service exists.
 
 Clocks use the timezone from **Admin → Config** and are shown as `DD.MM.YYYY HH:MM`. Saving a form, including a file upload, updates the page without a reload.
 
@@ -112,13 +114,15 @@ Each round the platform asks the checker to put a fresh flag on every team's cop
 
 Default points, edited in the Attack-Defense settings: attack +10, lost flag −10, defense +5, SLA +2 per OK round, downtime −20 multiplied by the number of opponents. A dead service costs more than being robbed by every other team.
 
+During a live event the admin can add or remove a team's points more than once. The parentheses show the final sum of those changes, not the last change, and that sum is not multiplied by the SLA reward. The number in front is the standing total, so `14 (+ 12)` is a game score of 2 plus 12 admin points. A team with no admin points has no parentheses.
+
 **Preparation (minutes)** holds the checkers and the score until the window ends. The window starts when the settings are saved. A zero duration disables it. Unpause the engine so rounds begin when the window ends.
 
 `scripts/ad_bootstrap.py` creates the admin and the teams alpha, bravo and gamma. When `TASK_DIR` and `CHECKER_ZIP` are set it starts the service on `10.255.66.1`, `10.255.66.2` and `10.255.66.3` at one port (`BASE_PORT`, default 18101), uploads the checker, creates the service and saves the hosts. Loopback addresses are rejected. Defaults: `/home/kali/my_AD_examples/AD1/bucket` and `bucket.zip`. The site is `https://ctf.local`.
 
 ### Submitting flags
 
-Players submit stolen flags on `/attack`, or from scripts with the team token shown on that page (the captain can issue a new one):
+Players submit stolen flags on `/attack`, or from scripts with the team token shown on that page (the captain can issue a new one). CSRF is skipped only for this flag URL, and only when `X-Team-Token` is set. The page form sends the session token instead.
 
 ```bash
 curl -s -X POST https://ctf.local/api/v1/ad/flags \
@@ -129,7 +133,11 @@ curl -s -X POST https://ctf.local/api/v1/ad/flags \
 
 The body can be a JSON array, `{"flags": [...]}`, `{"submission": "..."}` or plain text with one flag per line (up to 500 flags per request, 120 requests per minute per team). Each flag gets its own status: `correct`, `already_solved`, `incorrect` or `own_flag` (`Cannot submit own flag`, no points). A single own flag returns HTTP 400.
 
-The `/dashboard` page (team × service grid with live status) is public, including for visitors who are not logged in, unless score visibility is set to hidden or admins only.
+The `/dashboard` page (team × service grid with live status) is public, including for visitors who are not logged in, unless score visibility is set to hidden or admins only. It polls `/api/v1/ad/dashboard` every 3 seconds. The archive does not poll: it plays the saved rounds.
+
+## Several copies of the site
+
+One process runs the Attack-Defense clock and Docker. That is `AD_ENGINE=true`, the default. Extra copies of the site set `AD_ENGINE=false` and must not receive the Docker socket. All copies share `SECRET_KEY`. `DB_MAX_OPEN` is the database pool of one process and is kept between 4 and 128. Each request writes one JSON line to stdout, without the body, the query string or cookies. A successful dashboard poll is not logged.
 
 ## Database
 
@@ -164,5 +172,3 @@ web/templates       CTFd-like theme
 web/static          CSS / JS
 docs                Swagger spec (localhost-only)
 ```
-
-The previous PHP application is replaced by this service. Challenge hosting (docker-compose per task) is no longer started by the platform; put connection strings in **Connection Info** the same way CTFd does.
